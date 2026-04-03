@@ -1,0 +1,24 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Acceso estudiantes</title><link rel="stylesheet" href="/styles.css"></head>
+<body><header><h1>Ingreso estudiante</h1></header><main>
+<div class="card" style="max-width:520px;margin:0 auto;">
+  <div class="grid">
+    <input id="email" type="email" placeholder="Correo electrónico">
+    <input id="password" type="password" placeholder="Contraseña">
+    <button onclick="login()">Ingresar</button>
+    <a class="button secondary" href="/alta-usuario">No tengo cuenta</a>
+    <a class="button secondary" href="/inicio">Volver al menú principal</a>
+    <div id="status" class="status"></div>
+  </div>
+</div>
+<script>
+async function login(){
+  const email=document.getElementById('email').value.trim();
+  const password=document.getElementById('password').value.trim();
+  const status=document.getElementById('status');
+  status.textContent='';
+  const res=await fetch('http://localhost:8080/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+  const data=await res.json();
+  if(data.ok){ localStorage.setItem('estudiante_email', email); window.location='/inscripcion'; }
+  else{ status.textContent=data.error||'No se pudo ingresar.'; status.className='status error'; }
+}
+</script></main></body></html>

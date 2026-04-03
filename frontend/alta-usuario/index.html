@@ -1,0 +1,24 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Alta de usuario</title><link rel="stylesheet" href="/styles.css"></head>
+<body><header><h1>Alta de usuario estudiante</h1></header><main>
+<div class="card" style="max-width:520px;margin:0 auto;">
+  <div class="grid">
+    <input id="email" type="email" placeholder="Correo electrónico">
+    <input id="password" type="password" placeholder="Contraseña">
+    <button onclick="crear()">Crear cuenta</button>
+    <a class="button secondary" href="/acceso">Ya tengo cuenta</a>
+    <a class="button secondary" href="/inicio">Volver al menú principal</a>
+    <div id="status" class="status"></div>
+  </div>
+</div>
+<script>
+async function crear(){
+  if(!confirm('¿Seguro que querés crear tu cuenta?')) return;
+  const email=document.getElementById('email').value.trim();
+  const password=document.getElementById('password').value.trim();
+  const status=document.getElementById('status');
+  const res=await fetch('http://localhost:8080/registro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+  const data=await res.json();
+  if(data.ok){ status.textContent='Cuenta creada. Ahora ingresá con tu correo y contraseña.'; status.className='status ok'; }
+  else{ status.textContent=data.error||'No se pudo crear la cuenta.'; status.className='status error'; }
+}
+</script></main></body></html>

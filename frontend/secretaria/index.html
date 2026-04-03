@@ -1,0 +1,40 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Secretaría</title><link rel="stylesheet" href="/styles.css"></head>
+<body><header><h1>Acceso Secretaría</h1></header><main>
+<div class="card" id="loginCard" style="max-width:520px;margin:0 auto;">
+  <input id="password" type="password" placeholder="Contraseña de acceso">
+  <div class="actions"><button onclick="login()">Ingresar</button><a class="button secondary" href="/inicio">Volver al menú principal</a></div>
+  <div id="loginStatus" class="status"></div>
+</div>
+<div class="card" id="panel" style="display:none;">
+  <div class="actions"><a class="button secondary" href="/inicio">Volver al menú principal</a><button class="secondary" onclick="cargar()">Actualizar listado</button></div>
+  <h2>Inscriptos</h2>
+  <div class="table-wrap"><table><thead><tr><th>Apellido y nombre</th><th>DNI</th><th>Carrera</th><th>Año</th><th>Estado</th><th>Documentos</th><th>Acciones</th></tr></thead><tbody id="tbody"></tbody></table></div>
+</div>
+<script>
+async function login(){
+  const password=document.getElementById('password').value;
+  const res=await fetch('http://localhost:8080/secretaria/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password})});
+  const data=await res.json();
+  if(data.ok){ document.getElementById('loginCard').style.display='none'; document.getElementById('panel').style.display='block'; cargar(); }
+  else { const s=document.getElementById('loginStatus'); s.textContent=data.error; s.className='status error'; }
+}
+async function cargar(){
+  const res=await fetch('http://localhost:8080/secretaria/inscriptos');
+  const data=await res.json();
+  const tb=document.getElementById('tbody');
+  tb.innerHTML='';
+  data.forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${r.apellido} ${r.nombre}<br><span class="small">${r.correo}</span></td><td>${r.dni}</td><td>${r.nombre_carrera}</td><td>${r.anio_actual}°</td><td><span class="pill">${r.estado_general}</span></td><td>${r.pdf_dni?'<a href="http://localhost:8080/'+r.pdf_dni+'" target="_blank">DNI</a>':''} ${r.pdf_titulo_secundario?'<br><a href="http://localhost:8080/'+r.pdf_titulo_secundario+'" target="_blank">Título</a>':''}</td><td class="actions"><button class="good" onclick="accion(${r.id_estudiante},'aprobar')">Aprobar</button><button class="warn" onclick="accion(${r.id_estudiante},'observar')">Observar</button><button class="bad" onclick="accion(${r.id_estudiante},'rechazar')">Rechazar</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+async function accion(id,accion){
+  if(!confirm('¿Seguro que querés realizar esta acción?')) return;
+  const observaciones=prompt('Observaciones (opcional):')||'';
+  const res=await fetch('http://localhost:8080/secretaria/accion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id_estudiante:id,accion,observaciones})});
+  const data=await res.json();
+  alert(data.message||data.error);
+  if(data.ok) cargar();
+}
+</script></main></body></html>

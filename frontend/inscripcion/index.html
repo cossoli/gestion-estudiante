@@ -1,0 +1,58 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Inscripción</title><link rel="stylesheet" href="/styles.css"></head>
+<body><header><h1>Inscripción de estudiante</h1><p class="small">Completá tus datos y subí la documentación en PDF.</p></header><main>
+<div class="card"><div class="actions"><a class="button secondary" href="/inicio">Volver al menú principal</a></div></div>
+<div class="card">
+<form id="form" class="grid grid-2" enctype="multipart/form-data">
+  <input id="apellido" name="apellido" placeholder="Apellido" required>
+  <input id="nombre" name="nombre" placeholder="Nombre" required>
+  <input id="dni" name="dni" placeholder="DNI" required>
+  <input id="telefono" name="telefono" placeholder="Teléfono">
+  <input id="fecha_nacimiento" name="fecha_nacimiento" type="date">
+  <input id="localidad" name="localidad" placeholder="Localidad">
+  <input id="domicilio" name="domicilio" placeholder="Domicilio" style="grid-column:1/-1">
+  <select id="id_carrera" name="id_carrera" required></select>
+  <select id="anio_actual" name="anio_actual" required>
+    <option value="">Año actual</option><option value="1">1° año</option><option value="2">2° año</option><option value="3">3° año</option><option value="4">4° año</option>
+  </select>
+  <input id="anio_cohorte" name="anio_cohorte" type="number" placeholder="Año de cohorte">
+  <div></div>
+  <label class="small">DNI en PDF<input id="pdf_dni" name="pdf_dni" type="file" accept="application/pdf"></label>
+  <label class="small">Título secundario en PDF<input id="pdf_titulo_secundario" name="pdf_titulo_secundario" type="file" accept="application/pdf"></label>
+  <div class="actions" style="grid-column:1/-1"><button type="submit">Enviar inscripción</button></div>
+  <div id="status" class="status" style="grid-column:1/-1"></div>
+</form>
+</div>
+<script>
+const email=localStorage.getItem('estudiante_email');
+if(!email){ window.location='/acceso'; }
+async function cargarCarreras(){
+  const sel=document.getElementById('id_carrera');
+  sel.innerHTML='<option value="">Profesorado</option>';
+  const res=await fetch('http://localhost:8080/carreras');
+  const data=await res.json();
+  data.forEach(c=>{ const o=document.createElement('option'); o.value=c.id_carrera; o.textContent=c.nombre_carrera; sel.appendChild(o);});
+}
+async function cargarPerfil(){
+  const res=await fetch('http://localhost:8080/estudiante?email='+encodeURIComponent(email));
+  const data=await res.json();
+  if(data.inscripto){
+    const s=data.data;
+    ['apellido','nombre','dni','telefono','fecha_nacimiento','domicilio','localidad','anio_actual','anio_cohorte'].forEach(k=>{ if(document.getElementById(k) && s[k]!==null) document.getElementById(k).value=s[k];});
+    document.getElementById('id_carrera').value=s.id_carrera;
+    document.getElementById('status').textContent='Ya existe una inscripción guardada. Podés actualizarla y volver a enviarla.';
+    document.getElementById('status').className='status ok';
+  }
+}
+document.getElementById('form').addEventListener('submit', async e=>{
+  e.preventDefault();
+  if(!confirm('¿Seguro que querés enviar la inscripción?')) return;
+  const status=document.getElementById('status');
+  const fd=new FormData(document.getElementById('form'));
+  fd.append('email', email);
+  const res=await fetch('http://localhost:8080/inscripcion',{method:'POST',body:fd});
+  const data=await res.json();
+  status.textContent=data.message||data.error;
+  status.className='status '+(data.ok?'ok':'error');
+});
+(async()=>{await cargarCarreras(); await cargarPerfil();})();
+</script></main></body></html>

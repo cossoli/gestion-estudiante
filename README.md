@@ -1,7 +1,7 @@
 # Sistema base IFDC
 
 ## Qué trae
-- Acceso estudiante tipo SIU: ingresa con correo y contraseña, y si no tiene cuenta se da de alta.
+- Acceso estudiante : ingresa con correo y contraseña, y si no tiene cuenta se da de alta.
 - Secretaría con acceso por contraseña única.
 - Área TIC con acceso por contraseña única.
 - Formulario de inscripción con PDFs de DNI y título secundario.
@@ -20,12 +20,12 @@ docker compose up --build
 ```
 
 ## URLs
-- Frontend: http://localhost:3000/inicio
-- Backend salud: http://localhost:8080/health
-- Estudiante: http://localhost:3000/acceso
-- Alta de usuario: http://localhost:3000/alta-usuario
-- Secretaría: http://localhost:3000/secretaria
-- TIC: http://localhost:3000/tic
+- Frontend: http://localhost:3000/inicio/
+- Backend salud: http://localhost:8080/health/
+- Estudiante: http://localhost:3000/acceso/
+- Alta de usuario: http://localhost:3000/alta-usuario/
+- Secretaría: http://localhost:3000/secretaria/
+- TIC: http://localhost:3000/tic/
 
 ## Notas
 - La validación de correo quedó simulada: al crear la cuenta se marca como validado para simplificar las pruebas.

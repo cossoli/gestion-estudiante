@@ -1,24 +1,131 @@
-<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Alta de usuario</title><link rel="stylesheet" href="/styles.css"></head>
-<body><header><h1>Alta de usuario estudiante</h1></header><main>
-<div class="card" style="max-width:520px;margin:0 auto;">
-  <div class="grid">
-    <input id="email" type="email" placeholder="Correo electrónico">
-    <input id="password" type="password" placeholder="Contraseña">
-    <button onclick="crear()">Crear cuenta</button>
-    <a class="button secondary" href="/acceso/">Ya tengo cuenta</a>
-    <a class="button secondary" href="/inicio/">Volver al menú principal</a>
-    <div id="status" class="status"></div>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crear cuenta — IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Sistema de Gestión Estudiantil</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <a class="btn btn-secondary" href="/inicio/">← Menú principal</a>
+    </nav>
   </div>
-</div>
+</header>
+
+<main>
+  <div class="card card-sm">
+    <h2 class="card-title">Crear cuenta</h2>
+    <p class="card-subtitle">Ingresá tu correo y una contraseña para registrarte. Luego completarás tus datos personales.</p>
+
+    <div class="steps" style="margin-bottom:24px">
+      <div class="step active">
+        <div class="step-num">1</div>
+        <span>Crear cuenta</span>
+      </div>
+      <div class="step-line"></div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <span>Datos personales</span>
+      </div>
+      <div class="step-line"></div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <span>Revisión Secretaría</span>
+      </div>
+    </div>
+
+    <div class="grid" style="gap:14px">
+      <div class="field">
+        <label class="field-label" for="email">Correo electrónico</label>
+        <input id="email" type="email" placeholder="tu@correo.com" autocomplete="email">
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="password">Contraseña</label>
+        <input id="password" type="password" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+        <span class="text-sm text-muted">Usá al menos 6 caracteres.</span>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="password2">Repetir contraseña</label>
+        <input id="password2" type="password" placeholder="Repetí tu contraseña" autocomplete="new-password">
+      </div>
+
+      <div id="status" class="alert" style="display:none"></div>
+
+      <button id="btnCrear" class="btn btn-primary btn-full" onclick="crear()">Crear cuenta</button>
+
+      <div class="divider"></div>
+
+      <a class="btn btn-secondary btn-full" href="/acceso/">Ya tengo cuenta — Iniciar sesión</a>
+    </div>
+  </div>
+</main>
+
+<script src="/app.js"></script>
 <script>
-async function crear(){
-  if(!confirm('¿Seguro que querés crear tu cuenta?')) return;
-  const email=document.getElementById('email').value.trim();
-  const password=document.getElementById('password').value.trim();
-  const status=document.getElementById('status');
-  const res=await fetch('http://localhost:8080/registro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
-  const data=await res.json();
-  if(data.ok){ status.textContent='Cuenta creada. Ahora ingresá con tu correo y contraseña.'; status.className='status ok'; }
-  else{ status.textContent=data.error||'No se pudo crear la cuenta.'; status.className='status error'; }
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') crear();
+});
+
+async function crear() {
+  const email    = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const password2= document.getElementById('password2').value;
+  const status   = document.getElementById('status');
+  const btn      = document.getElementById('btnCrear');
+
+  clearStatus(status);
+
+  if (!email || !password || !password2) {
+    return setStatus(status, 'Completá todos los campos.', 'warn');
+  }
+  if (!validarEmail(email)) {
+    return setStatus(status, 'El correo no tiene un formato válido.', 'warn');
+  }
+  if (!validarPassword(password)) {
+    return setStatus(status, 'La contraseña debe tener al menos 6 caracteres.', 'warn');
+  }
+  if (password !== password2) {
+    return setStatus(status, 'Las contraseñas no coinciden.', 'warn');
+  }
+
+  setLoading(btn, true, 'Creando cuenta...');
+  try {
+    const res  = await fetch(API + '/registro', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      setStatus(status, 'Cuenta creada correctamente. Ahora ingresá para completar tu inscripción.', 'ok');
+      setTimeout(() => {
+        localStorage.setItem('estudiante_email', email);
+        window.location.replace('/inscripcion/');
+      }, 1800);
+    } else {
+      setStatus(status, data.error || 'No se pudo crear la cuenta.', 'error');
+    }
+  } catch {
+    setStatus(status, 'No se pudo conectar con el servidor. Intentá de nuevo.', 'error');
+  } finally {
+    setLoading(btn, false);
+  }
 }
-</script></main></body></html>
+</script>
+</body>
+</html>

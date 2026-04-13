@@ -1,24 +1,105 @@
-<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Acceso estudiantes</title><link rel="stylesheet" href="/styles.css"></head>
-<body><header><h1>Ingreso estudiante</h1></header><main>
-<div class="card" style="max-width:520px;margin:0 auto;">
-  <div class="grid">
-    <input id="email" type="email" placeholder="Correo electrónico">
-    <input id="password" type="password" placeholder="Contraseña">
-    <button onclick="login()">Ingresar</button>
-    <a class="button secondary" href="/alta-usuario/">No tengo cuenta</a>
-    <a class="button secondary" href="/inicio/">Volver al menú principal</a>
-    <div id="status" class="status"></div>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acceso estudiante — IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Sistema de Gestión Estudiantil</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <a class="btn btn-secondary" href="/inicio/">← Menú principal</a>
+    </nav>
   </div>
-</div>
+</header>
+
+<main>
+  <div class="card card-sm">
+    <h2 class="card-title">Ingreso estudiante</h2>
+    <p class="card-subtitle">Ingresá con tu correo y contraseña para continuar.</p>
+
+    <div class="grid" style="gap:14px">
+      <div class="field">
+        <label class="field-label" for="email">Correo electrónico</label>
+        <input id="email" type="email" placeholder="tu@correo.com" autocomplete="email">
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="password">Contraseña</label>
+        <input id="password" type="password" placeholder="Tu contraseña" autocomplete="current-password">
+      </div>
+
+      <div id="status" class="alert" style="display:none"></div>
+
+      <button id="btnLogin" class="btn btn-primary btn-full" onclick="login()">Ingresar</button>
+
+      <div class="divider"></div>
+
+      <a class="btn btn-secondary btn-full" href="/alta-usuario/">No tengo cuenta — Registrarme</a>
+    </div>
+  </div>
+</main>
+
+<script src="/app.js"></script>
 <script>
-async function login(){
-  const email=document.getElementById('email').value.trim();
-  const password=document.getElementById('password').value.trim();
-  const status=document.getElementById('status');
-  status.textContent='';
-  const res=await fetch('http://localhost:8080/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
-  const data=await res.json();
-  if(data.ok){ localStorage.setItem('estudiante_email', email); window.location='/inscripcion'; }
-  else{ status.textContent=data.error||'No se pudo ingresar.'; status.className='status error'; }
+// Si ya tiene sesión, redirigir
+if (localStorage.getItem('estudiante_email')) {
+  window.location.replace('/inscripcion/');
 }
-</script></main></body></html>
+
+// Enter para loguear
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') login();
+});
+
+async function login() {
+  const email    = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value.trim();
+  const status   = document.getElementById('status');
+  const btn      = document.getElementById('btnLogin');
+
+  clearStatus(status);
+
+  // Validaciones cliente
+  if (!email || !password) {
+    return setStatus(status, 'Completá correo y contraseña.', 'warn');
+  }
+  if (!validarEmail(email)) {
+    return setStatus(status, 'El correo no tiene un formato válido.', 'warn');
+  }
+
+  setLoading(btn, true, 'Ingresando...');
+  try {
+    const res  = await fetch(API + '/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      localStorage.setItem('estudiante_email', email);
+      window.location.replace('/inscripcion/');
+    } else {
+      setStatus(status, data.error || 'Correo o contraseña incorrectos.', 'error');
+    }
+  } catch {
+    setStatus(status, 'No se pudo conectar con el servidor. Intentá de nuevo.', 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+</script>
+</body>
+</html>

@@ -1,8 +1,83 @@
-<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Inicio</title><link rel="stylesheet" href="/styles.css"></head>
-<body><header><h1>Sistema de Gestión Estudiantil</h1><p class="small">IFDC Río Colorado</p></header><main>
-<div class="card center"><h2>Menú principal</h2><p class="small">Acceso para estudiantes, Secretaría y Área TIC.</p></div>
-<div class="grid grid-2">
-  <div class="card"><h3>Estudiantes</h3><p>Ingresá con tu correo y contraseña. Si no tenés cuenta, te das de alta desde el mismo acceso.</p><a class="button" href="/acceso/">Ingreso estudiante</a></div>
-  <div class="card"><h3>Secretaría</h3><p>Acceso por contraseña única. Desde aquí se revisan y aprueban las inscripciones.</p><a class="button" href="/secretaria/">Acceso Secretaría</a></div>
-  <div class="card"><h3>Área TIC</h3><p>Acceso por contraseña única. Lista automática de estudiantes aprobados por Secretaría.</p><a class="button" href="/tic/">Acceso TIC</a></div>
-</div></main></body></html>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Gestión Estudiantil — IFDC Río Colorado</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Sistema de Gestión Estudiantil</div>
+      </div>
+    </div>
+    <div class="header-nav" id="headerNav"></div>
+  </div>
+</header>
+
+<main>
+  <div class="page-hero text-center" style="margin-bottom:8px">
+    <h1>Gestión Estudiantil</h1>
+    <p>Seleccioná tu acceso según tu rol en la institución.</p>
+  </div>
+
+  <div class="menu-grid">
+    <a class="menu-card" href="/acceso/">
+      <div class="menu-card-icon blue">🎓</div>
+      <h3>Estudiantes</h3>
+      <p>Registrate, completá tu inscripción y seguí el estado de tu trámite.</p>
+      <span class="menu-card-arrow">→</span>
+    </a>
+    <a class="menu-card" href="/secretaria/">
+      <div class="menu-card-icon green">📋</div>
+      <h3>Secretaría</h3>
+      <p>Revisá y aprobá las inscripciones de los estudiantes pendientes.</p>
+      <span class="menu-card-arrow">→</span>
+    </a>
+    <a class="menu-card" href="/tic/">
+      <div class="menu-card-icon amber">💻</div>
+      <h3>Área TIC</h3>
+      <p>Gestioná la carga de estudiantes aprobados en la plataforma institucional.</p>
+      <span class="menu-card-arrow">→</span>
+    </a>
+  </div>
+
+  <div id="healthStatus" style="margin-top:24px"></div>
+</main>
+
+<script src="/app.js"></script>
+<script>
+// Verificar sesión activa de estudiante
+const emailGuardado = localStorage.getItem('estudiante_email');
+if (emailGuardado) {
+  document.getElementById('headerNav').innerHTML = `
+    <span class="text-sm text-muted">${esc(emailGuardado)}</span>
+    <a class="btn btn-secondary" href="/inscripcion/">Mi inscripción</a>
+    <button class="btn btn-secondary" onclick="cerrarSesion()">Salir</button>
+  `;
+}
+
+function cerrarSesion() {
+  localStorage.removeItem('estudiante_email');
+  window.location.reload();
+}
+
+// Verificar estado del backend
+(async () => {
+  try {
+    const res = await fetch(API + '/health', { signal: AbortSignal.timeout(4000) });
+    const data = await res.json();
+    if (!data.ok) throw new Error();
+  } catch {
+    setStatus(document.getElementById('healthStatus'), 'El servidor no responde. Algunos servicios pueden no estar disponibles.', 'warn');
+  }
+})();
+</script>
+</body>
+</html>

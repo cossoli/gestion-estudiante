@@ -1,3 +1,9 @@
+-- ─────────────────────────────────────────────────────────────────
+-- SISTEMA DE GESTIÓN ESTUDIANTIL — IFDC Río Colorado
+-- init.sql — Estructura completa de base de datos
+-- ─────────────────────────────────────────────────────────────────
+
+-- ── USUARIOS ─────────────────────────────────────────────────────
 CREATE TABLE usuarios (
     id_usuario SERIAL PRIMARY KEY,
     email VARCHAR(150) NOT NULL UNIQUE,
@@ -8,6 +14,7 @@ CREATE TABLE usuarios (
     fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ── CARRERAS ──────────────────────────────────────────────────────
 CREATE TABLE carreras (
     id_carrera SERIAL PRIMARY KEY,
     nombre_carrera VARCHAR(150) NOT NULL,
@@ -18,13 +25,42 @@ CREATE TABLE carreras (
     numero_resolucion VARCHAR(100)
 );
 
+-- ── MATERIAS ──────────────────────────────────────────────────────
+CREATE TABLE materias (
+    id_materia SERIAL PRIMARY KEY,
+    id_carrera INT NOT NULL,
+    nombre_materia VARCHAR(150) NOT NULL,
+    codigo_materia VARCHAR(50),
+    anio_plan INT NOT NULL CHECK (anio_plan >= 1),
+    formato VARCHAR(20) NOT NULL CHECK (formato IN ('anual', 'cuatrimestral')),
+    cuatrimestre INT CHECK (cuatrimestre IN (1, 2) OR cuatrimestre IS NULL),
+    activa BOOLEAN NOT NULL DEFAULT TRUE,
+    CONSTRAINT fk_materia_carrera FOREIGN KEY (id_carrera) REFERENCES carreras(id_carrera)
+);
+
+-- ── CORRELATIVAS ─────────────────────────────────────────────────
+-- Una materia puede requerir tener aprobada/cursada otra materia.
+-- tipo: 'aprobada' = el estudiante debe haber aprobado la cursada
+--       'cursada'  = alcanza con haberla cursado (aunque no aprobada)
+CREATE TABLE correlativas (
+    id_correlativa SERIAL PRIMARY KEY,
+    id_materia INT NOT NULL,           -- materia que tiene el requisito
+    id_materia_requerida INT NOT NULL, -- materia que se debe tener previa
+    tipo VARCHAR(10) NOT NULL DEFAULT 'aprobada'
+        CHECK (tipo IN ('aprobada', 'cursada')),
+    CONSTRAINT fk_corr_materia    FOREIGN KEY (id_materia)          REFERENCES materias(id_materia) ON DELETE CASCADE,
+    CONSTRAINT fk_corr_requerida  FOREIGN KEY (id_materia_requerida) REFERENCES materias(id_materia) ON DELETE CASCADE,
+    CONSTRAINT uq_correlativa     UNIQUE (id_materia, id_materia_requerida)
+);
+
+-- ── ESTUDIANTES ───────────────────────────────────────────────────
 CREATE TABLE estudiantes (
     id_estudiante SERIAL PRIMARY KEY,
     id_usuario INT NOT NULL UNIQUE,
     apellido VARCHAR(100) NOT NULL,
     nombre VARCHAR(100) NOT NULL,
     dni VARCHAR(20) NOT NULL UNIQUE,
-    correo VARCHAR(150) NOT NULL UNIQUE,
+    correo VARCHAR(150) UNIQUE,
     telefono VARCHAR(50),
     fecha_nacimiento DATE,
     domicilio VARCHAR(200),
@@ -47,6 +83,7 @@ CREATE TABLE estudiantes (
     CONSTRAINT fk_estudiante_carrera FOREIGN KEY (id_carrera) REFERENCES carreras(id_carrera)
 );
 
+-- ── DOCUMENTOS DEL ESTUDIANTE ─────────────────────────────────────
 CREATE TABLE documentos_estudiante (
     id_documento SERIAL PRIMARY KEY,
     id_estudiante INT NOT NULL UNIQUE,
@@ -57,18 +94,7 @@ CREATE TABLE documentos_estudiante (
     CONSTRAINT fk_documento_estudiante FOREIGN KEY (id_estudiante) REFERENCES estudiantes(id_estudiante) ON DELETE CASCADE
 );
 
-CREATE TABLE materias (
-    id_materia SERIAL PRIMARY KEY,
-    id_carrera INT NOT NULL,
-    nombre_materia VARCHAR(150) NOT NULL,
-    codigo_materia VARCHAR(50),
-    anio_plan INT NOT NULL CHECK (anio_plan >= 1),
-    formato VARCHAR(20) NOT NULL CHECK (formato IN ('anual', 'cuatrimestral')),
-    cuatrimestre INT CHECK (cuatrimestre IN (1, 2) OR cuatrimestre IS NULL),
-    activa BOOLEAN NOT NULL DEFAULT TRUE,
-    CONSTRAINT fk_materia_carrera FOREIGN KEY (id_carrera) REFERENCES carreras(id_carrera)
-);
-
+-- ── REVISIÓN SECRETARÍA (ingresantes) ────────────────────────────
 CREATE TABLE revision_secretaria (
     id_revision SERIAL PRIMARY KEY,
     id_estudiante INT NOT NULL UNIQUE,
@@ -82,6 +108,7 @@ CREATE TABLE revision_secretaria (
     CONSTRAINT fk_revision_estudiante FOREIGN KEY (id_estudiante) REFERENCES estudiantes(id_estudiante) ON DELETE CASCADE
 );
 
+-- ── CARGA TIC ─────────────────────────────────────────────────────
 CREATE TABLE carga_tic (
     id_carga SERIAL PRIMARY KEY,
     id_estudiante INT NOT NULL UNIQUE,
@@ -93,6 +120,7 @@ CREATE TABLE carga_tic (
     CONSTRAINT fk_tic_estudiante FOREIGN KEY (id_estudiante) REFERENCES estudiantes(id_estudiante) ON DELETE CASCADE
 );
 
+-- ── INSCRIPCIONES A MATERIAS (alta inicial) ───────────────────────
 CREATE TABLE inscripciones_materias (
     id_inscripcion_materia SERIAL PRIMARY KEY,
     id_estudiante INT NOT NULL,
@@ -106,30 +134,105 @@ CREATE TABLE inscripciones_materias (
     fecha_inscripcion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     observaciones TEXT,
     CONSTRAINT fk_inscripcion_estudiante FOREIGN KEY (id_estudiante) REFERENCES estudiantes(id_estudiante) ON DELETE CASCADE,
-    CONSTRAINT fk_inscripcion_materia FOREIGN KEY (id_materia) REFERENCES materias(id_materia),
+    CONSTRAINT fk_inscripcion_materia    FOREIGN KEY (id_materia)    REFERENCES materias(id_materia),
     CONSTRAINT uq_estudiante_materia_anio UNIQUE (id_estudiante, id_materia, anio_lectivo)
 );
 
+-- ── CURSADAS ──────────────────────────────────────────────────────
+-- Registra cada materia que un alumno cursa en un período.
+-- condicion_verificada: Secretaría confirmó que el alumno cumple correlativas.
+-- resultado: se completa al cierre del período.
+CREATE TABLE cursadas (
+    id_cursada SERIAL PRIMARY KEY,
+    id_estudiante INT NOT NULL,
+    id_materia INT NOT NULL,
+    anio_cursada INT NOT NULL,
+    cuatrimestre_cursada INT CHECK (cuatrimestre_cursada IN (1, 2) OR cuatrimestre_cursada IS NULL),
+    -- Verificación de condición por Secretaría
+    condicion_verificada BOOLEAN NOT NULL DEFAULT FALSE,
+    estado_condicion VARCHAR(20) NOT NULL DEFAULT 'pendiente'
+        CHECK (estado_condicion IN ('pendiente', 'apto', 'no_apto')),
+    observaciones_condicion TEXT,
+    fecha_verificacion TIMESTAMP,
+    -- Carga en plataforma
+    ingresado_plataforma BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Resultado al cierre
+    resultado VARCHAR(20)
+        CHECK (resultado IN ('aprobado', 'desaprobado', 'promocion', 'ausente', 'abandono') OR resultado IS NULL),
+    fecha_resultado DATE,
+    -- Observaciones generales
+    obs_cursada TEXT,
+    fecha_inscripcion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_cursada_estudiante FOREIGN KEY (id_estudiante) REFERENCES estudiantes(id_estudiante) ON DELETE CASCADE,
+    CONSTRAINT fk_cursada_materia    FOREIGN KEY (id_materia)    REFERENCES materias(id_materia),
+    CONSTRAINT uq_cursada            UNIQUE (id_estudiante, id_materia, anio_cursada, cuatrimestre_cursada)
+);
+
+-- ── MESAS DE EXAMEN FINAL ─────────────────────────────────────────
+-- Secretaría crea las mesas. Los alumnos se anotan desde su panel.
+CREATE TABLE mesas_finales (
+    id_mesa SERIAL PRIMARY KEY,
+    id_materia INT NOT NULL,
+    anio INT NOT NULL,
+    turno VARCHAR(20) NOT NULL
+        CHECK (turno IN ('feb_mar', 'julio', 'nov_dic')),
+    fecha_mesa DATE,
+    aula VARCHAR(100),
+    docente_titular VARCHAR(150),
+    activa BOOLEAN NOT NULL DEFAULT TRUE,  -- TRUE = abierta para inscripción
+    CONSTRAINT fk_mesa_materia FOREIGN KEY (id_materia) REFERENCES materias(id_materia)
+);
+
+-- ── INSCRIPCIONES A MESAS ─────────────────────────────────────────
+-- Vincula alumnos con mesas. Secretaría verifica condición.
+-- El resultado se carga al terminar el examen.
+CREATE TABLE inscripciones_mesas (
+    id_inscripcion SERIAL PRIMARY KEY,
+    id_estudiante INT NOT NULL,
+    id_mesa INT NOT NULL,
+    fecha_inscripcion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Verificación de condición
+    condicion_verificada BOOLEAN NOT NULL DEFAULT FALSE,
+    estado_condicion VARCHAR(20) NOT NULL DEFAULT 'pendiente'
+        CHECK (estado_condicion IN ('pendiente', 'apto', 'no_apto')),
+    -- Resultado del examen
+    nota_obtenida DECIMAL(4,2) CHECK (nota_obtenida >= 1 AND nota_obtenida <= 10 OR nota_obtenida IS NULL),
+    resultado VARCHAR(20)
+        CHECK (resultado IN ('aprobado', 'reprobado', 'ausente') OR resultado IS NULL),
+    obs_mesa TEXT,
+    CONSTRAINT fk_insc_mesa_estudiante FOREIGN KEY (id_estudiante) REFERENCES estudiantes(id_estudiante) ON DELETE CASCADE,
+    CONSTRAINT fk_insc_mesa_mesa       FOREIGN KEY (id_mesa)       REFERENCES mesas_finales(id_mesa),
+    CONSTRAINT uq_estudiante_mesa      UNIQUE (id_estudiante, id_mesa)
+);
+
+-- ─────────────────────────────────────────────────────────────────
+-- DATOS INICIALES
+-- ─────────────────────────────────────────────────────────────────
+
 INSERT INTO carreras (nombre_carrera, titulo_otorgado, duracion_anios, modalidad, numero_resolucion) VALUES
-('Profesorado de Matemática', 'Profesor/a de Matemática', 4, 'presencial', 'Res. 100/20'),
-('Profesorado de Física', 'Profesor/a de Física', 4, 'presencial', 'Res. 101/20'),
-('Profesorado de Lengua y Literatura', 'Profesor/a de Lengua y Literatura', 4, 'presencial', 'Res. 102/20'),
-('Profesorado de Teatro', 'Profesor/a de Teatro', 4, 'presencial', 'Res. 103/20');
+('Profesorado de Matemática',        'Profesor/a de Matemática',        4, 'presencial', 'Res. 100/20'),
+('Profesorado de Física',            'Profesor/a de Física',            4, 'presencial', 'Res. 101/20'),
+('Profesorado de Lengua y Literatura','Profesor/a de Lengua y Literatura',4,'presencial', 'Res. 102/20'),
+('Profesorado de Teatro',            'Profesor/a de Teatro',            4, 'presencial', 'Res. 103/20');
 
 INSERT INTO materias (id_carrera, nombre_materia, codigo_materia, anio_plan, formato, cuatrimestre) VALUES
-(1, 'Pedagogía', 'MAT-101', 1, 'anual', NULL),
-(1, 'Álgebra I', 'MAT-102', 1, 'cuatrimestral', 1),
+-- Profesorado de Matemática
+(1, 'Pedagogía',             'MAT-101', 1, 'anual',         NULL),
+(1, 'Álgebra I',             'MAT-102', 1, 'cuatrimestral', 1),
 (1, 'Análisis Matemático I', 'MAT-103', 1, 'cuatrimestral', 1),
-(1, 'Didáctica General', 'MAT-104', 1, 'cuatrimestral', 2),
-(2, 'Pedagogía', 'FIS-101', 1, 'anual', NULL),
-(2, 'Física General I', 'FIS-102', 1, 'cuatrimestral', 1),
-(2, 'Matemática Aplicada', 'FIS-103', 1, 'cuatrimestral', 1),
-(2, 'Didáctica General', 'FIS-104', 1, 'cuatrimestral', 2),
-(3, 'Pedagogía', 'LYL-101', 1, 'anual', NULL),
+(1, 'Didáctica General',     'MAT-104', 1, 'cuatrimestral', 2),
+-- Profesorado de Física
+(2, 'Pedagogía',             'FIS-101', 1, 'anual',         NULL),
+(2, 'Física General I',      'FIS-102', 1, 'cuatrimestral', 1),
+(2, 'Matemática Aplicada',   'FIS-103', 1, 'cuatrimestral', 1),
+(2, 'Didáctica General',     'FIS-104', 1, 'cuatrimestral', 2),
+-- Profesorado de Lengua y Literatura
+(3, 'Pedagogía',                    'LYL-101', 1, 'anual',         NULL),
 (3, 'Introducción a la Literatura', 'LYL-102', 1, 'cuatrimestral', 1),
-(3, 'Gramática I', 'LYL-103', 1, 'cuatrimestral', 1),
-(3, 'Didáctica General', 'LYL-104', 1, 'cuatrimestral', 2),
-(4, 'Pedagogía', 'TEA-101', 1, 'anual', NULL),
-(4, 'Actuación I', 'TEA-102', 1, 'cuatrimestral', 1),
-(4, 'Expresión Corporal', 'TEA-103', 1, 'cuatrimestral', 1),
-(4, 'Didáctica General', 'TEA-104', 1, 'cuatrimestral', 2);
+(3, 'Gramática I',                  'LYL-103', 1, 'cuatrimestral', 1),
+(3, 'Didáctica General',            'LYL-104', 1, 'cuatrimestral', 2),
+-- Profesorado de Teatro
+(4, 'Pedagogía',           'TEA-101', 1, 'anual',         NULL),
+(4, 'Actuación I',         'TEA-102', 1, 'cuatrimestral', 1),
+(4, 'Expresión Corporal',  'TEA-103', 1, 'cuatrimestral', 1),
+(4, 'Didáctica General',   'TEA-104', 1, 'cuatrimestral', 2);

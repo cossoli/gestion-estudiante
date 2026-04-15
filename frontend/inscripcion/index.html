@@ -5,6 +5,42 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Inscripción — IFDC</title>
   <link rel="stylesheet" href="/styles.css">
+  <style>
+    .bienvenida {
+      text-align: center;
+      padding: 16px 0 8px;
+    }
+    .bienvenida-icon {
+      font-size: 56px;
+      margin-bottom: 16px;
+      animation: bounceIn .5s ease;
+    }
+    @keyframes bounceIn {
+      0%   { transform: scale(0.5); opacity: 0; }
+      70%  { transform: scale(1.1); }
+      100% { transform: scale(1);   opacity: 1; }
+    }
+    .credencial {
+      background: var(--primary-light);
+      border: 2px solid var(--primary);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin: 20px 0;
+      text-align: left;
+    }
+    .credencial-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 15px;
+    }
+    .credencial-row:last-child { border-bottom: none; }
+    .credencial-label { color: var(--text-2); font-weight: 500; }
+    .credencial-value { font-weight: 700; color: var(--primary); font-size: 17px; letter-spacing: .02em; }
+    .credencial-note  { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  </style>
 </head>
 <body>
 
@@ -18,160 +54,209 @@
       </div>
     </div>
     <nav class="header-nav">
-      <span class="text-sm text-muted" id="headerEmail"></span>
-      <button class="btn btn-secondary" onclick="cerrarSesion()">Salir</button>
+      <span class="text-sm text-muted" id="headerDni"></span>
+      <button class="btn btn-secondary" id="btnSalir" onclick="cerrarSesion()" style="display:none">Salir</button>
       <a class="btn btn-secondary" href="/inicio/">Menú</a>
     </nav>
   </div>
 </header>
 
 <main>
-  <div class="page-hero">
-    <h1>Mi inscripción</h1>
-    <p>Completá tus datos personales y subí la documentación requerida en PDF.</p>
+
+  <!-- ── Pantalla de bienvenida (se muestra tras primer registro) ── -->
+  <div id="pantallaOk" style="display:none">
+    <div class="card card-sm">
+      <div class="bienvenida">
+        <div class="bienvenida-icon">🎉</div>
+        <h2 class="card-title">¡Inscripción enviada!</h2>
+        <p class="text-sm text-muted" style="margin-bottom:0">
+          Tu inscripción fue recibida correctamente y quedará pendiente de revisión por Secretaría.
+        </p>
+      </div>
+
+      <div class="credencial">
+        <div style="font-size:13px;font-weight:700;color:var(--text-2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.05em">
+          📋 Tus datos de acceso
+        </div>
+        <div class="credencial-row">
+          <div>
+            <div class="credencial-label">Usuario</div>
+            <div class="credencial-note">Tu número de DNI</div>
+          </div>
+          <div class="credencial-value" id="okDni"></div>
+        </div>
+        <div class="credencial-row">
+          <div>
+            <div class="credencial-label">Contraseña inicial</div>
+            <div class="credencial-note">Igual a tu DNI — podés cambiarla después</div>
+          </div>
+          <div class="credencial-value" id="okPass"></div>
+        </div>
+      </div>
+
+      <div class="alert alert-warn" style="margin-bottom:20px">
+        <span>⚠</span>
+        <span>Guardá estos datos. Los vas a necesitar para ingresar al sistema y seguir el estado de tu trámite.</span>
+      </div>
+
+      <div class="grid" style="gap:10px">
+        <a class="btn btn-primary btn-full" href="/acceso/">Ingresar al sistema →</a>
+        <button class="btn btn-secondary btn-full" onclick="verFormulario()">Ver / editar mi inscripción</button>
+      </div>
+    </div>
   </div>
 
-  <!-- Indicador de pasos -->
-  <div class="steps">
-    <div class="step done" id="step1">
-      <div class="step-num">✓</div>
-      <span>Cuenta creada</span>
+  <!-- ── Formulario ── -->
+  <div id="pantallaForm">
+    <div class="page-hero">
+      <h1>Mi inscripción</h1>
+      <p>Completá tus datos personales y subí la documentación requerida en PDF.</p>
     </div>
-    <div class="step-line"></div>
-    <div class="step active" id="step2">
-      <div class="step-num">2</div>
-      <span>Datos personales</span>
+
+    <!-- Pasos -->
+    <div class="steps">
+      <div class="step active" id="step1">
+        <div class="step-num">1</div>
+        <span>Datos personales</span>
+      </div>
+      <div class="step-line"></div>
+      <div class="step" id="step2">
+        <div class="step-num">2</div>
+        <span>Revisión Secretaría</span>
+      </div>
+      <div class="step-line"></div>
+      <div class="step" id="step3">
+        <div class="step-num">3</div>
+        <span>Alta en plataforma</span>
+      </div>
     </div>
-    <div class="step-line"></div>
-    <div class="step" id="step3">
-      <div class="step-num">3</div>
-      <span>Revisión Secretaría</span>
+
+    <!-- Estado actual -->
+    <div id="estadoActual" style="display:none" class="card">
+      <div id="estadoContent"></div>
     </div>
-    <div class="step-line"></div>
-    <div class="step" id="step4">
-      <div class="step-num">4</div>
-      <span>Alta en plataforma</span>
-    </div>
-  </div>
 
-  <!-- Estado actual -->
-  <div id="estadoActual" style="display:none" class="card">
-    <div id="estadoContent"></div>
-  </div>
+    <!-- Formulario -->
+    <div class="card">
+      <h3 class="card-title">Datos personales</h3>
+      <p class="card-subtitle">Los campos marcados con * son obligatorios.</p>
 
-  <!-- Formulario -->
-  <div class="card" id="formCard">
-    <h3 class="card-title">Datos personales</h3>
-    <p class="card-subtitle">Los campos marcados con * son obligatorios.</p>
+      <form id="form" enctype="multipart/form-data" onsubmit="enviar(event)">
+        <div class="grid grid-2" style="gap:16px">
 
-    <form id="form" enctype="multipart/form-data" onsubmit="enviar(event)">
-      <div class="grid grid-2" style="gap:16px">
+          <div class="field">
+            <label class="field-label" for="apellido">Apellido *</label>
+            <input id="apellido" name="apellido" placeholder="Ej: García" required autocomplete="family-name">
+          </div>
 
-        <div class="field">
-          <label class="field-label" for="apellido">Apellido *</label>
-          <input id="apellido" name="apellido" placeholder="Ej: García" required autocomplete="family-name">
-        </div>
+          <div class="field">
+            <label class="field-label" for="nombre">Nombre/s *</label>
+            <input id="nombre" name="nombre" placeholder="Ej: María Florencia" required autocomplete="given-name">
+          </div>
 
-        <div class="field">
-          <label class="field-label" for="nombre">Nombre/s *</label>
-          <input id="nombre" name="nombre" placeholder="Ej: María Florencia" required autocomplete="given-name">
-        </div>
+          <div class="field">
+            <label class="field-label" for="dni">DNI *</label>
+            <input id="dni" name="dni" placeholder="Sin puntos, ej: 35123456"
+                   required inputmode="numeric" maxlength="8">
+            <span class="text-sm text-muted">Solo números, sin puntos. Será tu usuario para ingresar.</span>
+          </div>
 
-        <div class="field">
-          <label class="field-label" for="dni">DNI *</label>
-          <input id="dni" name="dni" placeholder="Sin puntos, ej: 35123456" required
-                 inputmode="numeric" maxlength="8" pattern="\d{7,8}">
-          <span class="text-sm text-muted">Solo números, sin puntos.</span>
-        </div>
+          <div class="field">
+            <label class="field-label" for="correo">Correo electrónico</label>
+            <input id="correo" name="correo" type="email" placeholder="tu@correo.com" autocomplete="email">
+            <span class="text-sm text-muted">Para recibir notificaciones de Secretaría.</span>
+          </div>
 
-        <div class="field">
-          <label class="field-label" for="telefono">Teléfono / Celular</label>
-          <input id="telefono" name="telefono" placeholder="Ej: 2984123456" inputmode="tel">
-        </div>
+          <div class="field">
+            <label class="field-label" for="telefono">Teléfono / Celular</label>
+            <input id="telefono" name="telefono" placeholder="Ej: 2984123456" inputmode="tel">
+          </div>
 
-        <div class="field">
-          <label class="field-label" for="fecha_nacimiento">Fecha de nacimiento</label>
-          <input id="fecha_nacimiento" name="fecha_nacimiento" type="date">
-        </div>
+          <div class="field">
+            <label class="field-label" for="fecha_nacimiento">Fecha de nacimiento</label>
+            <input id="fecha_nacimiento" name="fecha_nacimiento" type="date">
+          </div>
 
-        <div class="field">
-          <label class="field-label" for="localidad">Localidad</label>
-          <input id="localidad" name="localidad" placeholder="Ej: Río Colorado">
-        </div>
+          <div class="field">
+            <label class="field-label" for="localidad">Localidad</label>
+            <input id="localidad" name="localidad" placeholder="Ej: Río Colorado">
+          </div>
 
-        <div class="field col-full">
-          <label class="field-label" for="domicilio">Domicilio</label>
-          <input id="domicilio" name="domicilio" placeholder="Calle, número, barrio">
-        </div>
+          <div class="field col-full">
+            <label class="field-label" for="domicilio">Domicilio</label>
+            <input id="domicilio" name="domicilio" placeholder="Calle, número, barrio">
+          </div>
 
-        <div class="field">
-          <label class="field-label" for="id_carrera">Carrera *</label>
-          <select id="id_carrera" name="id_carrera" required>
-            <option value="">Cargando carreras...</option>
-          </select>
-        </div>
+          <div class="field">
+            <label class="field-label" for="id_carrera">Carrera *</label>
+            <select id="id_carrera" name="id_carrera" required>
+              <option value="">Cargando...</option>
+            </select>
+          </div>
 
-        <div class="field">
-          <label class="field-label" for="anio_actual">Año que cursás *</label>
-          <select id="anio_actual" name="anio_actual" required>
-            <option value="">Seleccioná el año</option>
-            <option value="1">1° año</option>
-            <option value="2">2° año</option>
-            <option value="3">3° año</option>
-            <option value="4">4° año</option>
-          </select>
-        </div>
+          <div class="field">
+            <label class="field-label" for="anio_actual">Año que cursás *</label>
+            <select id="anio_actual" name="anio_actual" required>
+              <option value="">Seleccioná el año</option>
+              <option value="1">1° año</option>
+              <option value="2">2° año</option>
+              <option value="3">3° año</option>
+              <option value="4">4° año</option>
+            </select>
+          </div>
 
-        <div class="field">
-          <label class="field-label" for="anio_cohorte">Año de cohorte (ingreso)</label>
-          <input id="anio_cohorte" name="anio_cohorte" type="number"
-                 placeholder="Ej: 2023" min="2000" max="2099" inputmode="numeric">
-        </div>
+          <div class="field">
+            <label class="field-label" for="anio_cohorte">Año de cohorte (ingreso)</label>
+            <input id="anio_cohorte" name="anio_cohorte" type="number"
+                   placeholder="Ej: 2024" min="2000" max="2099" inputmode="numeric">
+          </div>
 
-        <div class="col-full" style="margin-top:8px">
-          <p class="card-subtitle" style="margin-bottom:16px">Documentación requerida en PDF</p>
-          <div class="grid grid-2" style="gap:16px">
-            <div class="field">
-              <label class="field-label">Copia del DNI (PDF)</label>
-              <div class="file-field" id="fieldDni">
-                <input type="file" id="pdf_dni" name="pdf_dni" accept="application/pdf"
-                       onchange="mostrarArchivo(this,'fieldDni')">
-                <div class="file-field-icon">📄</div>
-                <div class="file-field-text">Hacé clic o arrastrá el PDF aquí</div>
-                <div class="file-field-name" id="nameDni"></div>
+          <div class="col-full">
+            <div class="divider"></div>
+            <p class="card-subtitle" style="margin-bottom:16px">Documentación requerida en PDF</p>
+            <div class="grid grid-2" style="gap:16px">
+              <div class="field">
+                <label class="field-label">Copia del DNI (PDF)</label>
+                <div class="file-field" id="fieldDni">
+                  <input type="file" id="pdf_dni" name="pdf_dni" accept="application/pdf"
+                         onchange="mostrarArchivo(this,'fieldDni','nameDni')">
+                  <div class="file-field-icon">📄</div>
+                  <div class="file-field-text">Hacé clic o arrastrá el PDF aquí</div>
+                  <div class="file-field-name" id="nameDni"></div>
+                </div>
               </div>
-            </div>
-
-            <div class="field">
-              <label class="field-label">Título secundario (PDF)</label>
-              <div class="file-field" id="fieldTitulo">
-                <input type="file" id="pdf_titulo_secundario" name="pdf_titulo_secundario" accept="application/pdf"
-                       onchange="mostrarArchivo(this,'fieldTitulo')">
-                <div class="file-field-icon">🎓</div>
-                <div class="file-field-text">Hacé clic o arrastrá el PDF aquí</div>
-                <div class="file-field-name" id="nameTitulo"></div>
+              <div class="field">
+                <label class="field-label">Título secundario (PDF)</label>
+                <div class="file-field" id="fieldTitulo">
+                  <input type="file" id="pdf_titulo_secundario" name="pdf_titulo_secundario" accept="application/pdf"
+                         onchange="mostrarArchivo(this,'fieldTitulo','nameTitulo')">
+                  <div class="file-field-icon">🎓</div>
+                  <div class="file-field-text">Hacé clic o arrastrá el PDF aquí</div>
+                  <div class="file-field-name" id="nameTitulo"></div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="col-full">
-          <div id="status" class="alert" style="display:none"></div>
-        </div>
+          <div class="col-full">
+            <div id="status" class="alert" style="display:none"></div>
+          </div>
 
-        <div class="col-full actions">
-          <button type="submit" id="btnEnviar" class="btn btn-primary">Enviar inscripción</button>
-        </div>
+          <div class="col-full actions">
+            <button type="submit" id="btnEnviar" class="btn btn-primary">Enviar inscripción</button>
+          </div>
 
-      </div>
-    </form>
+        </div>
+      </form>
+    </div>
   </div>
+
 </main>
 
-<!-- Modales -->
+<!-- Modal confirmación -->
 <div class="modal-overlay hidden" id="modalConfirm">
   <div class="modal">
-    <h3 class="modal-title" id="modalConfirmTitle">¿Confirmar acción?</h3>
+    <h3 class="modal-title" id="modalConfirmTitle">¿Confirmar?</h3>
     <p class="modal-body text-sm text-muted" id="modalConfirmMsg"></p>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="modalConfirmCancel">Cancelar</button>
@@ -182,25 +267,34 @@
 
 <script src="/app.js"></script>
 <script>
-const email = localStorage.getItem('estudiante_email');
-if (!email) window.location.replace('/acceso/');
+const dniSesion = localStorage.getItem('estudiante_dni');
 
-document.getElementById('headerEmail').textContent = email || '';
+if (dniSesion) {
+  document.getElementById('headerDni').textContent = 'DNI: ' + dniSesion;
+  document.getElementById('btnSalir').style.display = '';
+  document.getElementById('dni').value    = dniSesion;
+  document.getElementById('dni').readOnly = true;
+}
 
 function cerrarSesion() {
-  localStorage.removeItem('estudiante_email');
+  localStorage.removeItem('estudiante_dni');
   window.location.replace('/acceso/');
 }
 
-function mostrarArchivo(input, fieldId) {
-  const field = document.getElementById(fieldId);
-  const nameEl = field.querySelector('.file-field-name');
+function mostrarArchivo(input, fieldId, nameId) {
+  const field  = document.getElementById(fieldId);
+  const nameEl = document.getElementById(nameId);
   if (input.files && input.files[0]) {
-    nameEl.textContent = '✓ ' + input.files[0].name;
-    nameEl.style.display = 'block';
+    nameEl.textContent     = '✓ ' + input.files[0].name;
+    nameEl.style.display   = 'block';
     field.style.borderColor = 'var(--ok)';
-    field.style.background = 'var(--ok-bg)';
+    field.style.background  = 'var(--ok-bg)';
   }
+}
+
+function verFormulario() {
+  document.getElementById('pantallaOk').style.display   = 'none';
+  document.getElementById('pantallaForm').style.display = 'block';
 }
 
 // Cargar carreras
@@ -218,53 +312,49 @@ async function cargarCarreras() {
     });
   } catch {
     sel.innerHTML = '<option value="">Error al cargar carreras</option>';
-    setStatus(document.getElementById('status'), 'No se pudieron cargar las carreras. Recargá la página.', 'error');
   }
 }
 
 // Cargar perfil existente
-async function cargarPerfil() {
+async function cargarPerfil(dni) {
+  if (!dni) return;
   try {
-    const res  = await fetch(API + '/estudiante?email=' + encodeURIComponent(email), { signal: AbortSignal.timeout(6000) });
+    const res  = await fetch(API + '/estudiante?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(6000) });
     const data = await res.json();
-
     if (data.inscripto) {
       const s = data.data;
-      // Rellenar campos
-      ['apellido','nombre','dni','telefono','fecha_nacimiento','domicilio','localidad','anio_actual','anio_cohorte'].forEach(k => {
+      ['apellido','nombre','correo','telefono','fecha_nacimiento','domicilio','localidad','anio_actual','anio_cohorte'].forEach(k => {
         const el = document.getElementById(k);
         if (el && s[k] != null) el.value = s[k];
       });
       if (s.id_carrera) document.getElementById('id_carrera').value = s.id_carrera;
-
-      // Mostrar estado
       mostrarEstado(s.estado_general);
     }
-  } catch {
-    // Silencioso — si falla, el form queda vacío
-  }
+  } catch { /* silencioso */ }
 }
 
 function mostrarEstado(estado) {
-  const card = document.getElementById('estadoActual');
+  const card    = document.getElementById('estadoActual');
   const content = document.getElementById('estadoContent');
   const msgs = {
-    pendiente_secretaria:  ['info',  '⏳ Tu inscripción está siendo revisada por Secretaría. Te avisaremos cuando haya novedades.'],
-    observado_secretaria:  ['warn',  '📝 Secretaría realizó observaciones en tu inscripción. Revisá los datos y volvé a enviar.'],
-    rechazado_secretaria:  ['error', '✕ Tu inscripción fue rechazada. Contactate con Secretaría para más información.'],
-    aprobado_secretaria:   ['ok',    '✓ ¡Tu inscripción fue aprobada por Secretaría! Está pendiente de carga en plataforma.'],
-    cargado_plataforma:    ['ok',    '✓ ¡Estás dado de alta en la plataforma institucional! Ya podés acceder con tus credenciales.'],
+    pendiente_secretaria: ['info',  '⏳ Tu inscripción está siendo revisada por Secretaría.'],
+    observado_secretaria: ['warn',  '📝 Secretaría realizó observaciones. Revisá los datos y volvé a enviar.'],
+    rechazado_secretaria: ['error', '✕ Tu inscripción fue rechazada. Contactate con Secretaría.'],
+    aprobado_secretaria:  ['ok',    '✓ ¡Inscripción aprobada por Secretaría! Pendiente de carga en plataforma.'],
+    cargado_plataforma:   ['ok',    '✓ ¡Estás dado de alta en la plataforma institucional!'],
   };
   const [tipo, msg] = msgs[estado] || ['info', 'Estado: ' + estado];
   content.innerHTML = `<div class="alert alert-${tipo}"><span>${iconFor(tipo)}</span><span>${msg}</span></div>`;
   card.style.display = 'block';
 
-  // Actualizar pasos
-  if (['aprobado_secretaria','cargado_plataforma'].includes(estado)) {
-    document.getElementById('step3').className = 'step done';
+  if (['pendiente_secretaria','observado_secretaria'].includes(estado)) {
+    document.getElementById('step1').className = 'step done';
+    document.getElementById('step2').className = 'step active';
   }
-  if (estado === 'cargado_plataforma') {
-    document.getElementById('step4').className = 'step done';
+  if (['aprobado_secretaria','cargado_plataforma'].includes(estado)) {
+    document.getElementById('step1').className = 'step done';
+    document.getElementById('step2').className = 'step done';
+    document.getElementById('step3').className = estado === 'cargado_plataforma' ? 'step done' : 'step active';
   }
 }
 
@@ -273,21 +363,17 @@ async function enviar(e) {
   const status = document.getElementById('status');
   clearStatus(status);
 
-  // Validaciones
   const dni = document.getElementById('dni').value.trim();
-  if (!validarDNI(dni)) {
-    return setStatus(status, 'El DNI debe tener 7 u 8 dígitos numéricos sin puntos.', 'warn');
-  }
-  if (!document.getElementById('id_carrera').value) {
-    return setStatus(status, 'Seleccioná una carrera.', 'warn');
-  }
-  if (!document.getElementById('anio_actual').value) {
-    return setStatus(status, 'Seleccioná el año que cursás.', 'warn');
-  }
+  if (!validarDNI(dni))                                  return setStatus(status, 'El DNI debe tener 7 u 8 dígitos numéricos.', 'warn');
+  if (!document.getElementById('id_carrera').value)     return setStatus(status, 'Seleccioná una carrera.', 'warn');
+  if (!document.getElementById('anio_actual').value)    return setStatus(status, 'Seleccioná el año que cursás.', 'warn');
 
+  const esNuevo = !dniSesion;
   const ok = await confirmar({
-    titulo: 'Enviar inscripción',
-    mensaje: 'Una vez enviada, la inscripción quedará pendiente de revisión por Secretaría. ¿Querés continuar?',
+    titulo:  esNuevo ? 'Crear cuenta y enviar inscripción' : 'Actualizar inscripción',
+    mensaje: esNuevo
+      ? `Se creará tu cuenta con DNI ${dni} como usuario y contraseña inicial. Anotá estos datos antes de continuar.`
+      : '¿Confirmás el envío de tus datos actualizados?',
     btnOk: 'Sí, enviar',
   });
   if (!ok) return;
@@ -297,19 +383,29 @@ async function enviar(e) {
 
   try {
     const fd = new FormData(document.getElementById('form'));
-    fd.append('email', email);
-
     const res  = await fetch(API + '/inscripcion', {
       method: 'POST',
       body: fd,
-      signal: AbortSignal.timeout(15000)
+      signal: AbortSignal.timeout(20000)
     });
     const data = await res.json();
 
     if (data.ok) {
-      setStatus(status, data.message || 'Inscripción enviada correctamente.', 'ok');
-      mostrarEstado('pendiente_secretaria');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Guardar DNI en sesión
+      if (data.dni) localStorage.setItem('estudiante_dni', data.dni);
+
+      if (esNuevo) {
+        // Mostrar pantalla de bienvenida con credenciales
+        document.getElementById('okDni').textContent  = data.dni;
+        document.getElementById('okPass').textContent = data.dni;
+        document.getElementById('pantallaForm').style.display = 'none';
+        document.getElementById('pantallaOk').style.display   = 'block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        setStatus(status, data.message || 'Inscripción actualizada correctamente.', 'ok');
+        mostrarEstado('pendiente_secretaria');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     } else {
       setStatus(status, data.error || 'No se pudo enviar la inscripción.', 'error');
     }
@@ -322,7 +418,7 @@ async function enviar(e) {
 
 (async () => {
   await cargarCarreras();
-  await cargarPerfil();
+  await cargarPerfil(dniSesion);
 })();
 </script>
 </body>

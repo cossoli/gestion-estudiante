@@ -31,13 +31,13 @@
     <a class="menu-card" href="/acceso/">
       <div class="menu-card-icon blue">🎓</div>
       <h3>Estudiantes</h3>
-      <p>Registrate, completá tu inscripción y seguí el estado de tu trámite.</p>
+      <p>Ingresá con tu DNI para completar tu inscripción, ver el estado de tu trámite y gestionar tus materias.</p>
       <span class="menu-card-arrow">→</span>
     </a>
     <a class="menu-card" href="/secretaria/">
       <div class="menu-card-icon green">📋</div>
       <h3>Secretaría</h3>
-      <p>Revisá y aprobá las inscripciones de los estudiantes pendientes.</p>
+      <p>Revisá ingresantes, verificá cursadas y gestioná las inscripciones a materias.</p>
       <span class="menu-card-arrow">→</span>
     </a>
     <a class="menu-card" href="/tic/">
@@ -53,25 +53,24 @@
 
 <script src="/app.js"></script>
 <script>
-// Verificar sesión activa de estudiante
-const emailGuardado = localStorage.getItem('estudiante_email');
-if (emailGuardado) {
+const dniGuardado = localStorage.getItem('estudiante_dni');
+if (dniGuardado) {
   document.getElementById('headerNav').innerHTML = `
-    <span class="text-sm text-muted">${esc(emailGuardado)}</span>
-    <a class="btn btn-secondary" href="/inscripcion/">Mi inscripción</a>
+    <span class="text-sm text-muted">DNI: ${esc(dniGuardado)}</span>
+    <a class="btn btn-secondary" href="/panel/">Mi panel</a>
+    <a class="btn btn-secondary" href="/inscripcion/">Mis datos</a>
     <button class="btn btn-secondary" onclick="cerrarSesion()">Salir</button>
   `;
 }
 
 function cerrarSesion() {
-  localStorage.removeItem('estudiante_email');
+  localStorage.removeItem('estudiante_dni');
   window.location.reload();
 }
 
-// Verificar estado del backend
 (async () => {
   try {
-    const res = await fetch(API + '/health', { signal: AbortSignal.timeout(4000) });
+    const res  = await fetch(API + '/health', { signal: AbortSignal.timeout(4000) });
     const data = await res.json();
     if (!data.ok) throw new Error();
   } catch {

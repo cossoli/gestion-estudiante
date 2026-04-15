@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi panel — IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .materia-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      transition: box-shadow .15s;
+    }
+    .materia-card:hover { box-shadow: var(--shadow); }
+    .materia-card.apto    { border-color: #b6e2cf; }
+    .materia-card.no-apto { border-color: #f5c2c2; }
+    .materia-card.pendiente { border-color: #f5dcb0; }
+
+    .materia-info { flex: 1; min-width: 0; }
+    .materia-nombre { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .materia-meta   { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+
+    .materias-grid { display: grid; gap: 10px; }
+
+    .disponible-card {
+      background: var(--surface2);
+      border: 1.5px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      transition: border-color .15s, background .15s;
+    }
+    .disponible-card:hover { border-color: var(--primary); background: var(--primary-light); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Sistema de Gestión Estudiantil</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <span class="text-sm text-muted" id="headerNombre"></span>
+      <a class="btn btn-secondary" href="/inscripcion/">Mis datos</a>
+      <button class="btn btn-secondary" onclick="cerrarSesion()">Salir</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <div id="cargando" class="card card-sm text-center" style="padding:40px">
+    <div class="spinner" style="border-color:rgba(26,63,168,.2);border-top-color:var(--primary);width:28px;height:28px;margin:0 auto 12px"></div>
+    <p class="text-sm text-muted">Cargando tu panel...</p>
+  </div>
+
+  <div id="contenido" style="display:none">
+
+    <!-- Hero con nombre -->
+    <div class="page-hero">
+      <h1 id="saludoNombre">Bienvenido/a</h1>
+      <p id="saludoCarrera" class="text-muted"></p>
+    </div>
+
+    <!-- Estado general -->
+    <div class="card" id="cardEstado">
+      <h3 class="card-title" style="margin-bottom:12px">Estado de tu inscripción</h3>
+      <div id="estadoContent"></div>
+      <div id="obsSecretaria" style="display:none;margin-top:12px"></div>
+    </div>
+
+    <!-- Mis materias -->
+    <div class="card" id="cardMaterias">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <h3 class="card-title" style="margin:0">Mis materias <span id="anioLectivo" class="text-sm text-muted"></span></h3>
+        <button class="btn btn-primary" id="btnAnotarse" onclick="abrirInscripcion()" style="display:none">
+          + Anotarme a una materia
+        </button>
+      </div>
+
+      <div id="materiasContent">
+        <div class="empty-state">
+          <div class="empty-state-icon">📚</div>
+          <p>No tenés materias asignadas todavía.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<!-- Modal: inscribirse a una materia -->
+<div class="modal-overlay hidden" id="modalInscripcion">
+  <div class="modal" style="max-width:520px">
+    <h3 class="modal-title">Anotarme a una materia</h3>
+    <p class="text-sm text-muted" style="margin-bottom:16px">
+      Seleccioná la materia a la que querés inscribirte. Secretaría verificará si estás en condiciones de cursarla.
+    </p>
+    <div id="materiasDisponibles" style="max-height:320px;overflow-y:auto;display:grid;gap:8px"></div>
+    <div id="sinDisponibles" class="empty-state" style="display:none;padding:24px">
+      <div class="empty-state-icon">✓</div>
+      <p>Ya estás inscripto a todas las materias disponibles.</p>
+    </div>
+    <div class="modal-footer" style="margin-top:16px">
+      <button class="btn btn-secondary" onclick="cerrarModalInscripcion()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmación -->
+<div class="modal-overlay hidden" id="modalConfirm">
+  <div class="modal">
+    <h3 class="modal-title" id="modalConfirmTitle">¿Confirmar?</h3>
+    <p class="modal-body text-sm text-muted" id="modalConfirmMsg"></p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modalConfirmCancel">Cancelar</button>
+      <button class="btn btn-primary" id="modalConfirmOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+<script>
+const dni = localStorage.getItem('estudiante_dni');
+if (!dni) window.location.replace('/acceso/');
+
+let alumnoData       = null;
+let materiasActuales = [];
+let anioLectivo      = new Date().getFullYear();
+
+function cerrarSesion() {
+  localStorage.removeItem('estudiante_dni');
+  window.location.replace('/acceso/');
+}
+
+// ── Carga inicial ────────────────────────────────────────────────
+async function cargar() {
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(API + '/estudiante?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(8000) }),
+      fetch(API + '/alumno/materias?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(8000) })
+    ]);
+    const dataEst  = await r1.json();
+    const dataMat  = await r2.json();
+
+    document.getElementById('cargando').style.display  = 'none';
+    document.getElementById('contenido').style.display = 'block';
+
+    if (!dataEst.inscripto) {
+      window.location.replace('/inscripcion/');
+      return;
+    }
+
+    alumnoData       = dataEst.data;
+    materiasActuales = dataMat.materias || [];
+
+    renderHeader();
+    renderEstado();
+    renderMaterias();
+  } catch {
+    document.getElementById('cargando').innerHTML = `
+      <div class="alert alert-error"><span>✕</span><span>No se pudo cargar tu panel. Recargá la página.</span></div>`;
+  }
+}
+
+function renderHeader() {
+  const a = alumnoData;
+  document.getElementById('headerNombre').textContent  = `${a.apellido}, ${a.nombre}`;
+  document.getElementById('saludoNombre').textContent  = `Hola, ${a.nombre.split(' ')[0]}`;
+  document.getElementById('saludoCarrera').textContent = `${a.nombre_carrera} — ${a.anio_actual}° año · Cohorte ${a.anio_cohorte || '—'}`;
+  document.getElementById('anioLectivo').textContent   = `· ${anioLectivo}`;
+}
+
+function renderEstado() {
+  const estado = alumnoData.estado_general;
+  const msgs = {
+    pendiente_secretaria: ['info',  '⏳', 'Tu inscripción está siendo revisada por Secretaría.'],
+    observado_secretaria: ['warn',  '📝', 'Secretaría realizó observaciones en tu inscripción.'],
+    rechazado_secretaria: ['error', '✕',  'Tu inscripción fue rechazada.'],
+    aprobado_secretaria:  ['ok',    '✓',  'Tu inscripción fue aprobada. Pendiente de carga en plataforma.'],
+    cargado_plataforma:   ['ok',    '✓',  'Estás dado de alta en la plataforma institucional.'],
+  };
+  const [tipo, icon, msg] = msgs[estado] || ['info', 'ℹ', estado];
+  document.getElementById('estadoContent').innerHTML =
+    `<div class="alert alert-${tipo}"><span>${icon}</span><span>${msg}</span></div>`;
+
+  // Mostrar observaciones si las hay
+  if (alumnoData.observaciones_secretaria) {
+    const obs = document.getElementById('obsSecretaria');
+    obs.innerHTML = `
+      <div class="alert alert-warn">
+        <span>📋</span>
+        <div><strong>Observaciones de Secretaría:</strong><br>${esc(alumnoData.observaciones_secretaria)}</div>
+      </div>`;
+    obs.style.display = 'block';
+  }
+
+  // Mostrar botón anotarse solo si está activo en plataforma
+  if (['cargado_plataforma','aprobado_secretaria'].includes(estado)) {
+    document.getElementById('btnAnotarse').style.display = '';
+  }
+}
+
+function renderMaterias() {
+  const cont = document.getElementById('materiasContent');
+  if (!materiasActuales.length) {
+    cont.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">📚</div>
+        <p>No tenés materias asignadas todavía.</p>
+      </div>`;
+    return;
+  }
+
+  const pillEstado = {
+    habilitado: '<span class="pill pill-aprobado">Habilitada</span>',
+    pendiente:  '<span class="pill pill-pendiente">Pendiente verificación</span>',
+    observado:  '<span class="pill pill-observado">Observada</span>',
+    rechazado:  '<span class="pill pill-rechazado">No habilitada</span>',
+  };
+
+  const claseCard = {
+    habilitado: 'apto',
+    pendiente:  'pendiente',
+    observado:  'pendiente',
+    rechazado:  'no-apto',
+  };
+
+  cont.innerHTML = `<div class="materias-grid">` +
+    materiasActuales.map(m => `
+      <div class="materia-card ${claseCard[m.estado_secretaria] || ''}">
+        <div class="materia-info">
+          <div class="materia-nombre">${esc(m.nombre_materia)}</div>
+          <div class="materia-meta">
+            ${esc(m.codigo_materia || '')}
+            ${m.formato === 'cuatrimestral' ? ` · ${m.cuatrimestre}° cuatrimestre` : ' · Anual'}
+          </div>
+          ${m.observaciones ? `<div class="text-sm" style="color:var(--warn);margin-top:4px">⚠ ${esc(m.observaciones)}</div>` : ''}
+        </div>
+        <div>${pillEstado[m.estado_secretaria] || ''}</div>
+      </div>`
+    ).join('') +
+  `</div>`;
+}
+
+// ── Inscripción a nueva materia ──────────────────────────────────
+async function abrirInscripcion() {
+  const overlay = document.getElementById('modalInscripcion');
+  const cont    = document.getElementById('materiasDisponibles');
+  const sinDisp = document.getElementById('sinDisponibles');
+  cont.innerHTML = '<div class="text-sm text-muted" style="padding:12px">Cargando materias disponibles...</div>';
+  overlay.classList.remove('hidden');
+
+  try {
+    const res  = await fetch(API + '/alumno/materias-disponibles?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(6000) });
+    const data = await res.json();
+    const disponibles = data.materias || [];
+
+    if (!disponibles.length) {
+      cont.style.display    = 'none';
+      sinDisp.style.display = 'block';
+      return;
+    }
+    sinDisp.style.display = 'none';
+    cont.style.display    = 'grid';
+
+    cont.innerHTML = disponibles.map(m => `
+      <div class="disponible-card">
+        <div>
+          <div style="font-weight:600;font-size:14px">${esc(m.nombre_materia)}</div>
+          <div class="text-sm text-muted">
+            ${esc(m.codigo_materia||'')} · ${m.formato === 'cuatrimestral' ? m.cuatrimestre+'° cuatrim.' : 'Anual'}
+            · ${esc(m.anio_plan)}° año
+          </div>
+        </div>
+        <button class="btn btn-primary" style="padding:6px 14px;font-size:13px;flex-shrink:0"
+          onclick="inscribirse(${m.id_materia}, '${esc(m.nombre_materia)}')">
+          Anotarme
+        </button>
+      </div>`
+    ).join('');
+  } catch {
+    cont.innerHTML = '<div class="alert alert-error" style="margin:0"><span>✕</span><span>Error al cargar materias.</span></div>';
+  }
+}
+
+function cerrarModalInscripcion() {
+  document.getElementById('modalInscripcion').classList.add('hidden');
+}
+
+async function inscribirse(idMateria, nombreMateria) {
+  const ok = await confirmar({
+    titulo:  'Confirmar inscripción',
+    mensaje: `¿Querés anotarte a "${nombreMateria}"? Secretaría verificará si estás en condiciones de cursarla.`,
+    btnOk:   'Sí, anotarme'
+  });
+  if (!ok) return;
+
+  try {
+    const res  = await fetch(API + '/alumno/inscribir-materia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dni, id_materia: idMateria }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      cerrarModalInscripcion();
+      await cargar(); // refrescar panel
+    } else {
+      alert(data.error || 'No se pudo registrar la inscripción.');
+    }
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+
+cargar();
+</script>
+</body>
+</html>

@@ -26,17 +26,20 @@
 <main>
   <div class="card card-sm">
     <h2 class="card-title">Ingreso estudiante</h2>
-    <p class="card-subtitle">Ingresá con tu correo y contraseña para continuar.</p>
+    <p class="card-subtitle">Ingresá con tu DNI y contraseña. Si es tu primera vez, tu contraseña es tu número de DNI.</p>
 
     <div class="grid" style="gap:14px">
+
       <div class="field">
-        <label class="field-label" for="email">Correo electrónico</label>
-        <input id="email" type="email" placeholder="tu@correo.com" autocomplete="email">
+        <label class="field-label" for="dni">DNI</label>
+        <input id="dni" type="text" placeholder="Sin puntos, ej: 35123456"
+               inputmode="numeric" maxlength="8" autocomplete="username">
       </div>
 
       <div class="field">
         <label class="field-label" for="password">Contraseña</label>
         <input id="password" type="password" placeholder="Tu contraseña" autocomplete="current-password">
+        <span class="text-sm text-muted">Si es tu primera vez, tu contraseña es tu DNI.</span>
       </div>
 
       <div id="status" class="alert" style="display:none"></div>
@@ -45,57 +48,54 @@
 
       <div class="divider"></div>
 
-      <a class="btn btn-secondary btn-full" href="/alta-usuario/">No tengo cuenta — Registrarme</a>
+      <p class="text-sm text-muted text-center">
+        ¿No te registraste todavía?
+        <a href="/inscripcion/" style="color:var(--primary);font-weight:600">Completá tu inscripción aquí.</a>
+      </p>
+
     </div>
   </div>
 </main>
 
 <script src="/app.js"></script>
 <script>
-// Si ya tiene sesión, redirigir
-if (localStorage.getItem('estudiante_email')) {
-  window.location.replace('/inscripcion/');
+// Si ya tiene sesión, ir al panel
+if (localStorage.getItem('estudiante_dni')) {
+  window.location.replace('/panel/');
 }
 
-// Enter para loguear
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter') login();
 });
 
 async function login() {
-  const email    = document.getElementById('email').value.trim();
+  const dni      = document.getElementById('dni').value.trim();
   const password = document.getElementById('password').value.trim();
   const status   = document.getElementById('status');
   const btn      = document.getElementById('btnLogin');
 
   clearStatus(status);
 
-  // Validaciones cliente
-  if (!email || !password) {
-    return setStatus(status, 'Completá correo y contraseña.', 'warn');
-  }
-  if (!validarEmail(email)) {
-    return setStatus(status, 'El correo no tiene un formato válido.', 'warn');
-  }
+  if (!dni || !password) return setStatus(status, 'Ingresá tu DNI y contraseña.', 'warn');
+  if (!validarDNI(dni))  return setStatus(status, 'El DNI debe tener 7 u 8 dígitos numéricos.', 'warn');
 
   setLoading(btn, true, 'Ingresando...');
   try {
     const res  = await fetch(API + '/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ dni, password }),
       signal: AbortSignal.timeout(8000)
     });
     const data = await res.json();
-
     if (data.ok) {
-      localStorage.setItem('estudiante_email', email);
-      window.location.replace('/inscripcion/');
+      localStorage.setItem('estudiante_dni', dni);
+      window.location.replace('/panel/');
     } else {
-      setStatus(status, data.error || 'Correo o contraseña incorrectos.', 'error');
+      setStatus(status, data.error || 'DNI o contraseña incorrectos.', 'error');
     }
   } catch {
-    setStatus(status, 'No se pudo conectar con el servidor. Intentá de nuevo.', 'error');
+    setStatus(status, 'No se pudo conectar con el servidor.', 'error');
   } finally {
     setLoading(btn, false);
   }

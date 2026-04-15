@@ -389,6 +389,98 @@ try {
         respond(['ok' => true, 'message' => 'Estudiante marcado como cargado en plataforma.']);
     }
 
+    // ── Panel alumno: materias inscriptas del año actual ─────────────────────
+    if ($path === '/alumno/materias' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $dni = trim($_GET['dni'] ?? '');
+        if ($dni === '') respond(['ok' => false, 'error' => 'Falta el DNI.'], 400);
+
+        $estStmt = $pdo->prepare("SELECT id_estudiante FROM estudiantes WHERE dni = ?");
+        $estStmt->execute([$dni]);
+        $est = $estStmt->fetch();
+        if (!$est) respond(['ok' => false, 'error' => 'Estudiante no encontrado.'], 404);
+
+        $stmt = $pdo->prepare(
+            "SELECT im.id_inscripcion_materia, im.estado_secretaria, im.observaciones,
+                    m.nombre_materia, m.codigo_materia, m.formato, m.cuatrimestre, m.anio_plan
+             FROM inscripciones_materias im
+             JOIN materias m ON m.id_materia = im.id_materia
+             WHERE im.id_estudiante = ? AND im.anio_lectivo = ?
+             ORDER BY m.anio_plan, m.cuatrimestre, m.nombre_materia"
+        );
+        $stmt->execute([$est['id_estudiante'], (int) date('Y')]);
+        respond(['ok' => true, 'materias' => $stmt->fetchAll()]);
+    }
+
+    // ── Panel alumno: materias disponibles para inscribirse ───────────────────
+    // Devuelve materias de la carrera del alumno a las que aún no está inscripto.
+    if ($path === '/alumno/materias-disponibles' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $dni = trim($_GET['dni'] ?? '');
+        if ($dni === '') respond(['ok' => false, 'error' => 'Falta el DNI.'], 400);
+
+        $estStmt = $pdo->prepare(
+            "SELECT id_estudiante, id_carrera, anio_actual FROM estudiantes WHERE dni = ?"
+        );
+        $estStmt->execute([$dni]);
+        $est = $estStmt->fetch();
+        if (!$est) respond(['ok' => false, 'error' => 'Estudiante no encontrado.'], 404);
+
+        $stmt = $pdo->prepare(
+            "SELECT m.id_materia, m.nombre_materia, m.codigo_materia, m.formato, m.cuatrimestre, m.anio_plan
+             FROM materias m
+             WHERE m.id_carrera = ?
+               AND m.activa = TRUE
+               AND m.id_materia NOT IN (
+                   SELECT id_materia FROM inscripciones_materias
+                   WHERE id_estudiante = ? AND anio_lectivo = ?
+               )
+             ORDER BY m.anio_plan, m.cuatrimestre, m.nombre_materia"
+        );
+        $stmt->execute([$est['id_carrera'], $est['id_estudiante'], (int) date('Y')]);
+        respond(['ok' => true, 'materias' => $stmt->fetchAll()]);
+    }
+
+    // ── Panel alumno: inscribirse a una materia ───────────────────────────────
+    if ($path === '/alumno/inscribir-materia' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data      = json_input();
+        $dni       = trim($data['dni'] ?? '');
+        $idMateria = (int) ($data['id_materia'] ?? 0);
+
+        if ($dni === '' || $idMateria === 0) {
+            respond(['ok' => false, 'error' => 'Datos incompletos.'], 400);
+        }
+
+        $estStmt = $pdo->prepare(
+            "SELECT id_estudiante, estado_general FROM estudiantes WHERE dni = ?"
+        );
+        $estStmt->execute([$dni]);
+        $est = $estStmt->fetch();
+        if (!$est) respond(['ok' => false, 'error' => 'Estudiante no encontrado.'], 404);
+
+        if (!in_array($est['estado_general'], ['aprobado_secretaria', 'cargado_plataforma'])) {
+            respond(['ok' => false, 'error' => 'Tu inscripción todavía no fue aprobada por Secretaría.'], 403);
+        }
+
+        $anioLectivo = (int) date('Y');
+
+        // Verificar que no esté ya inscripto
+        $check = $pdo->prepare(
+            "SELECT id_inscripcion_materia FROM inscripciones_materias
+             WHERE id_estudiante = ? AND id_materia = ? AND anio_lectivo = ?"
+        );
+        $check->execute([$est['id_estudiante'], $idMateria, $anioLectivo]);
+        if ($check->fetch()) {
+            respond(['ok' => false, 'error' => 'Ya estás inscripto a esa materia.'], 409);
+        }
+
+        $pdo->prepare(
+            "INSERT INTO inscripciones_materias
+             (id_estudiante, id_materia, anio_lectivo, tipo_inscripcion, estado_secretaria, habilitada)
+             VALUES (?, ?, ?, 'manual', 'pendiente', FALSE)"
+        )->execute([$est['id_estudiante'], $idMateria, $anioLectivo]);
+
+        respond(['ok' => true, 'message' => 'Inscripción registrada. Quedará pendiente de verificación por Secretaría.']);
+    }
+
     // ── Secretaría: listado de alumnos cursando con correlativas ─────────────
     // Devuelve todos los alumnos activos con sus inscripciones a materias
     // y el estado de cada correlativa requerida.

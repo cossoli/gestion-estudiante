@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finales — Docente IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Docente — Exámenes finales</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <a class="btn btn-secondary" href="/docente/">← Mi panel</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <div class="card card-sm" id="sinSesion" style="display:none">
+    <div class="alert alert-warn">
+      <span>⚠</span><span>Sesión no iniciada. <a href="/docente/" style="color:var(--warn);font-weight:700">Ingresá desde el panel docente.</a></span>
+    </div>
+  </div>
+
+  <div id="panelContent" style="display:none">
+    <div class="page-hero">
+      <h1>Exámenes finales</h1>
+      <p>Cargá las notas de los exámenes finales de tus mesas asignadas.</p>
+    </div>
+
+    <!-- Mesas del docente -->
+    <div id="mesasGrid" class="grid" style="gap:16px"></div>
+    <div id="emptyMesas" class="empty-state card" style="display:none;padding:40px">
+      <div class="empty-state-icon">📝</div>
+      <p>No tenés mesas de examen asignadas.</p>
+    </div>
+  </div>
+
+</main>
+
+<!-- Modal: alumnos de la mesa -->
+<div class="modal-overlay hidden" id="modalMesa">
+  <div class="modal" style="max-width:680px">
+    <h3 class="modal-title" id="modalMesaTitulo"></h3>
+    <p class="text-sm text-muted" id="modalMesaSub" style="margin-bottom:16px"></p>
+    <div id="modalMesaContent"></div>
+    <div class="modal-footer" style="margin-top:16px">
+      <button class="btn btn-secondary" onclick="cerrarModal()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmación -->
+<div class="modal-overlay hidden" id="modalConfirm">
+  <div class="modal">
+    <h3 class="modal-title" id="modalConfirmTitle">¿Confirmar?</h3>
+    <p class="modal-body text-sm text-muted" id="modalConfirmMsg"></p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modalConfirmCancel">Cancelar</button>
+      <button class="btn btn-primary" id="modalConfirmOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+<script>
+let docenteData = null;
+let mesaActiva  = null;
+
+if (!sessionStorage.getItem('docente_auth')) {
+  document.getElementById('sinSesion').style.display    = 'block';
+} else {
+  docenteData = JSON.parse(sessionStorage.getItem('docente_data') || '{}');
+  document.getElementById('panelContent').style.display = 'block';
+  cargarMesas();
+}
+
+async function cargarMesas() {
+  try {
+    const res  = await fetch(API + '/docente/mesas?id_docente=' + docenteData.id_docente, { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    const mesas = data.mesas || [];
+    const grid  = document.getElementById('mesasGrid');
+    const empty = document.getElementById('emptyMesas');
+
+    if (!mesas.length) { grid.innerHTML = ''; empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+
+    const turnoLabel = { feb_mar: 'Feb - Mar', julio: 'Julio', nov_dic: 'Nov - Dic' };
+
+    grid.innerHTML = mesas.map(m => `
+      <div class="card" style="margin:0;border-left:4px solid ${m.activa ? 'var(--ok)' : 'var(--border-strong)'}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px">
+          <div>
+            <div style="font-weight:700;font-size:16px">${esc(m.nombre_materia)}</div>
+            <div class="text-sm text-muted" style="margin-top:3px">
+              ${esc(m.nombre_carrera)} ·
+              ${turnoLabel[m.turno] || m.turno} ${esc(String(m.anio))}
+              ${m.fecha_mesa ? ' · ' + new Date(m.fecha_mesa).toLocaleDateString('es-AR') : ''}
+            </div>
+            ${m.aula ? `<div class="text-sm text-muted">📍 ${esc(m.aula)}</div>` : ''}
+          </div>
+          <div style="text-align:right">
+            ${m.activa ? '<span class="pill pill-aprobado">Activa</span>' : '<span class="pill pill-pendiente">Cerrada</span>'}
+            <div class="text-sm text-muted" style="margin-top:4px">${m.total_inscriptos || 0} inscripto${m.total_inscriptos !== 1 ? 's' : ''}</div>
+          </div>
+        </div>
+        <button class="btn btn-primary" style="font-size:13px;padding:7px 16px"
+          onclick="verAlumnos(${m.id_mesa}, '${esc(m.nombre_materia)}', '${turnoLabel[m.turno]} ${m.anio}')">
+          👥 Ver alumnos y cargar notas
+        </button>
+      </div>
+    `).join('');
+  } catch {
+    document.getElementById('mesasGrid').innerHTML =
+      '<div class="alert alert-error"><span>✕</span><span>Error al cargar mesas.</span></div>';
+  }
+}
+
+async function verAlumnos(idMesa, nombreMateria, turnoAnio) {
+  mesaActiva = idMesa;
+  document.getElementById('modalMesaTitulo').textContent = nombreMateria;
+  document.getElementById('modalMesaSub').textContent    = turnoAnio;
+  document.getElementById('modalMesaContent').innerHTML  =
+    '<div class="text-sm text-muted" style="padding:12px">Cargando...</div>';
+  document.getElementById('modalMesa').classList.remove('hidden');
+  await recargarAlumnos(idMesa);
+}
+
+async function recargarAlumnos(idMesa) {
+  try {
+    const res   = await fetch(API + '/docente/mesas/' + idMesa + '/inscriptos', { signal: AbortSignal.timeout(8000) });
+    const data  = await res.json();
+    const alumnos = data.inscriptos || [];
+
+    if (!alumnos.length) {
+      document.getElementById('modalMesaContent').innerHTML =
+        '<div class="empty-state" style="padding:24px"><div class="empty-state-icon">👥</div><p>No hay alumnos inscriptos todavía.</p></div>';
+      return;
+    }
+
+    document.getElementById('modalMesaContent').innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Alumno</th>
+              <th>DNI</th>
+              <th>Condición</th>
+              <th>Resultado</th>
+              <th>Nota</th>
+              <th>Cargar nota</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${alumnos.map(a => {
+              const condPill = {
+                pendiente: '<span class="pill pill-pendiente">Pendiente</span>',
+                apto:      '<span class="pill pill-aprobado">Apto</span>',
+                no_apto:   '<span class="pill pill-rechazado">No apto</span>',
+              }[a.estado_condicion] || '';
+
+              const resPill = {
+                aprobado:  '<span class="pill pill-aprobado">Aprobado</span>',
+                reprobado: '<span class="pill pill-rechazado">Reprobado</span>',
+                ausente:   '<span class="pill pill-pendiente">Ausente</span>',
+              }[a.resultado] || '<span class="text-muted">—</span>';
+
+              const puedeCargar = a.estado_condicion === 'apto';
+
+              return `
+                <tr>
+                  <td>
+                    <div class="td-name">${esc(a.apellido)}, ${esc(a.nombre)}</div>
+                  </td>
+                  <td>${esc(a.dni)}</td>
+                  <td>${condPill}</td>
+                  <td>${resPill}</td>
+                  <td>${a.nota_obtenida != null ? '<strong>' + a.nota_obtenida + '</strong>' : '—'}</td>
+                  <td>
+                    ${puedeCargar ? `
+                      <div class="actions" style="gap:6px">
+                        <input type="number" id="nota-${a.id_inscripcion}" min="1" max="10" step="0.25"
+                          placeholder="Nota" value="${a.nota_obtenida || ''}"
+                          style="width:70px;padding:6px 8px;font-size:13px;border-radius:var(--radius-sm);border:1.5px solid var(--border)">
+                        <select id="res-${a.id_inscripcion}"
+                          style="padding:6px 8px;font-size:13px;border-radius:var(--radius-sm);border:1.5px solid var(--border);font:inherit">
+                          <option value="">Resultado</option>
+                          <option value="aprobado"  ${a.resultado==='aprobado' ?'selected':''}>Aprobado</option>
+                          <option value="reprobado" ${a.resultado==='reprobado'?'selected':''}>Reprobado</option>
+                          <option value="ausente"   ${a.resultado==='ausente'  ?'selected':''}>Ausente</option>
+                        </select>
+                        <button class="btn btn-primary" style="padding:6px 12px;font-size:12px"
+                          onclick="guardarNota(${a.id_inscripcion},'${esc(a.apellido)} ${esc(a.nombre)}')">
+                          ✓
+                        </button>
+                      </div>
+                    ` : `<span class="text-sm text-muted">${a.estado_condicion === 'no_apto' ? 'No apto' : 'Pend. verificación'}</span>`}
+                  </td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch {
+    document.getElementById('modalMesaContent').innerHTML =
+      '<div class="alert alert-error"><span>✕</span><span>Error al cargar alumnos.</span></div>';
+  }
+}
+
+function cerrarModal() {
+  document.getElementById('modalMesa').classList.add('hidden');
+  mesaActiva = null;
+}
+
+async function guardarNota(idInscripcion, nombre) {
+  const nota      = parseFloat(document.getElementById('nota-' + idInscripcion)?.value);
+  const resultado = document.getElementById('res-' + idInscripcion)?.value;
+
+  if (!resultado) return alert('Seleccioná el resultado.');
+  if (resultado !== 'ausente' && (isNaN(nota) || nota < 1 || nota > 10)) {
+    return alert('Ingresá una nota válida entre 1 y 10.');
+  }
+
+  const ok = await confirmar({
+    titulo:  'Cargar nota',
+    mensaje: `¿Confirmás cargar nota ${resultado !== 'ausente' ? nota : ''} (${resultado}) para ${nombre}?`,
+    btnOk:   'Sí, guardar'
+  });
+  if (!ok) return;
+
+  try {
+    const res  = await fetch(API + '/docente/mesas/resultado', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id_inscripcion: idInscripcion,
+        resultado,
+        nota_obtenida: resultado !== 'ausente' ? nota : null
+      }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      await recargarAlumnos(mesaActiva);
+      await cargarMesas();
+    } else {
+      alert(data.error || 'Error al guardar.');
+    }
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+</script>
+</body>
+</html>

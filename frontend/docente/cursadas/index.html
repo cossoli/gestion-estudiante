@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cursadas — Docente IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .alumno-row { transition: background .1s; }
+    .alumno-row:hover { background: var(--surface2); }
+    .resultado-select {
+      padding: 6px 10px; font-size: 13px;
+      border-radius: var(--radius-sm);
+      border: 1.5px solid var(--border);
+      font: inherit; cursor: pointer;
+      background: var(--surface);
+      min-width: 160px;
+    }
+    .resultado-select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(26,63,168,.12); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Docente — Cursadas</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <a class="btn btn-secondary" href="/docente/">← Mi panel</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <div class="card card-sm" id="sinSesion" style="display:none">
+    <div class="alert alert-warn">
+      <span>⚠</span><span>Sesión no iniciada. <a href="/docente/" style="color:var(--warn);font-weight:700">Ingresá desde el panel docente.</a></span>
+    </div>
+  </div>
+
+  <div id="panelContent" style="display:none">
+    <div class="page-hero">
+      <h1>Cursadas</h1>
+      <p>Cargá los resultados de las cursadas de tus materias.</p>
+    </div>
+
+    <!-- Filtro por materia -->
+    <div class="card" style="padding:16px 20px;margin-bottom:0">
+      <div class="filter-bar">
+        <select id="filtroMateria" onchange="cargarAlumnos()" style="max-width:300px">
+          <option value="">Seleccioná una materia</option>
+        </select>
+        <select id="filtroCuatrimestre" onchange="cargarAlumnos()" style="max-width:180px">
+          <option value="1">1° cuatrimestre</option>
+          <option value="2">2° cuatrimestre</option>
+          <option value="anual">Anual</option>
+        </select>
+        <input id="filtroAnio" type="number" value="" style="max-width:100px" placeholder="Año" onchange="cargarAlumnos()">
+      </div>
+    </div>
+
+    <div class="card" id="cardAlumnos" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <h3 class="card-title" style="margin:0" id="tituloMateria"></h3>
+        <div class="actions">
+          <input type="search" id="busqueda" placeholder="Buscar alumno..." oninput="filtrarAlumnos()" style="width:200px">
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Alumno</th>
+              <th>DNI</th>
+              <th>Resultado actual</th>
+              <th>Nuevo resultado</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div id="emptyState" class="empty-state" style="display:none">
+          <div class="empty-state-icon">👥</div>
+          <p>No hay alumnos inscriptos en esta materia.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="seleccionaMensaje" class="card text-center" style="padding:40px;color:var(--text-3)">
+      <div style="font-size:36px;margin-bottom:12px">📚</div>
+      <p>Seleccioná una materia para ver los alumnos inscriptos.</p>
+    </div>
+  </div>
+
+</main>
+
+<!-- Modal confirmación -->
+<div class="modal-overlay hidden" id="modalConfirm">
+  <div class="modal">
+    <h3 class="modal-title" id="modalConfirmTitle">¿Confirmar?</h3>
+    <p class="modal-body text-sm text-muted" id="modalConfirmMsg"></p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modalConfirmCancel">Cancelar</button>
+      <button class="btn btn-primary" id="modalConfirmOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+<script>
+let docenteData  = null;
+let todosAlumnos = [];
+
+// Verificar sesión
+if (!sessionStorage.getItem('docente_auth')) {
+  document.getElementById('sinSesion').style.display    = 'block';
+} else {
+  docenteData = JSON.parse(sessionStorage.getItem('docente_data') || '{}');
+  document.getElementById('panelContent').style.display = 'block';
+  document.getElementById('filtroAnio').value = new Date().getFullYear();
+  cargarMaterias();
+}
+
+async function cargarMaterias() {
+  try {
+    const res  = await fetch(API + '/docente/materias?id_docente=' + docenteData.id_docente, { signal: AbortSignal.timeout(6000) });
+    const data = await res.json();
+    const sel  = document.getElementById('filtroMateria');
+    sel.innerHTML = '<option value="">Seleccioná una materia</option>';
+    (data.materias || []).forEach(m => {
+      const o = document.createElement('option');
+      o.value = m.id_materia;
+      o.textContent = `${m.nombre_materia} (${m.nombre_carrera})`;
+      sel.appendChild(o);
+    });
+  } catch { /* silencioso */ }
+}
+
+async function cargarAlumnos() {
+  const idMateria     = document.getElementById('filtroMateria').value;
+  const cuatrimestre  = document.getElementById('filtroCuatrimestre').value;
+  const anio          = document.getElementById('filtroAnio').value;
+
+  document.getElementById('seleccionaMensaje').style.display = idMateria ? 'none' : 'block';
+  document.getElementById('cardAlumnos').style.display       = idMateria ? 'block' : 'none';
+  if (!idMateria) return;
+
+  try {
+    const params = new URLSearchParams({ id_materia: idMateria, anio_cursada: anio, cuatrimestre_cursada: cuatrimestre });
+    const res    = await fetch(API + '/docente/cursadas?' + params, { signal: AbortSignal.timeout(8000) });
+    const data   = await res.json();
+    todosAlumnos = data.alumnos || [];
+
+    const sel = document.getElementById('filtroMateria');
+    document.getElementById('tituloMateria').textContent =
+      sel.options[sel.selectedIndex]?.textContent || '';
+
+    filtrarAlumnos();
+  } catch {
+    document.getElementById('tbody').innerHTML =
+      `<tr><td colspan="5" class="text-center text-muted">Error al cargar alumnos.</td></tr>`;
+  }
+}
+
+function filtrarAlumnos() {
+  const busq  = document.getElementById('busqueda').value.toLowerCase();
+  const datos = todosAlumnos.filter(a =>
+    `${a.apellido} ${a.nombre} ${a.dni}`.toLowerCase().includes(busq)
+  );
+  renderTabla(datos);
+}
+
+function renderTabla(datos) {
+  const tb    = document.getElementById('tbody');
+  const empty = document.getElementById('emptyState');
+
+  if (!datos.length) { tb.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  const resultadoPill = {
+    aprobado:    '<span class="pill pill-aprobado">Aprobado</span>',
+    desaprobado: '<span class="pill pill-rechazado">Desaprobado</span>',
+    promocion:   '<span class="pill" style="background:#e8f5ff;color:#1a6fa8">Promoción</span>',
+    ausente:     '<span class="pill pill-pendiente">Ausente</span>',
+    abandono:    '<span class="pill pill-rechazado">Abandono</span>',
+  };
+
+  tb.innerHTML = datos.map(a => `
+    <tr class="alumno-row">
+      <td>
+        <div class="td-name">${esc(a.apellido)}, ${esc(a.nombre)}</div>
+        <div class="td-sub">${esc(a.correo || '')}</div>
+      </td>
+      <td>${esc(a.dni)}</td>
+      <td>${a.resultado ? (resultadoPill[a.resultado] || esc(a.resultado)) : '<span class="text-muted">Sin resultado</span>'}</td>
+      <td>
+        <select class="resultado-select" id="sel-${a.id_cursada}">
+          <option value="">— Sin cambio —</option>
+          <option value="aprobado"    ${a.resultado==='aprobado'    ? 'selected':''}>Aprobado</option>
+          <option value="desaprobado" ${a.resultado==='desaprobado' ? 'selected':''}>Desaprobado</option>
+          <option value="promocion"   ${a.resultado==='promocion'   ? 'selected':''}>Promoción</option>
+          <option value="ausente"     ${a.resultado==='ausente'     ? 'selected':''}>Ausente</option>
+          <option value="abandono"    ${a.resultado==='abandono'    ? 'selected':''}>Abandono</option>
+        </select>
+      </td>
+      <td>
+        <button class="btn btn-primary" style="padding:6px 14px;font-size:13px"
+          onclick="guardarResultado(${a.id_cursada}, '${esc(a.apellido)} ${esc(a.nombre)}')">
+          Guardar
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function guardarResultado(idCursada, nombre) {
+  const sel       = document.getElementById('sel-' + idCursada);
+  const resultado = sel?.value;
+  if (!resultado) return;
+
+  const ok = await confirmar({
+    titulo:  'Guardar resultado',
+    mensaje: `¿Confirmás cargar "${resultado}" para ${nombre}?`,
+    btnOk:   'Sí, guardar'
+  });
+  if (!ok) return;
+
+  try {
+    const res  = await fetch(API + '/docente/cursadas/resultado', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_cursada: idCursada, resultado }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      await cargarAlumnos();
+    } else {
+      alert(data.error || 'Error al guardar.');
+    }
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+</script>
+</body>
+</html>

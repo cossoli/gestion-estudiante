@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acceso docente — IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Panel Docente</div>
+      </div>
+    </div>
+    <nav class="header-nav" id="headerNav">
+      <a class="btn btn-secondary" href="/inicio/">← Menú principal</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <!-- Login -->
+  <div class="card card-sm" id="loginCard">
+    <h2 class="card-title">Acceso docente</h2>
+    <p class="card-subtitle">Ingresá con tu correo y contraseña institucional.</p>
+    <div class="grid" style="gap:14px">
+      <div class="field">
+        <label class="field-label" for="email">Correo institucional</label>
+        <input id="email" type="email" placeholder="tu@ifdc.edu.ar" autocomplete="email">
+      </div>
+      <div class="field">
+        <label class="field-label" for="password">Contraseña</label>
+        <input id="password" type="password" placeholder="Tu contraseña" autocomplete="current-password">
+      </div>
+      <div id="loginStatus" class="alert" style="display:none"></div>
+      <button id="btnLogin" class="btn btn-primary btn-full" onclick="login()">Ingresar</button>
+    </div>
+  </div>
+
+  <!-- Menú docente -->
+  <div id="menuDocente" style="display:none">
+    <div class="page-hero">
+      <h1 id="saludoDocente">Panel docente</h1>
+      <p id="saludoSub"></p>
+    </div>
+
+    <div class="menu-grid">
+      <a class="menu-card" href="/docente/cursadas/">
+        <div class="menu-card-icon blue">📚</div>
+        <h3>Cursadas</h3>
+        <p>Cargá los resultados de las cursadas: aprobado, desaprobado, promoción, ausente o abandono.</p>
+        <span class="menu-card-arrow">→</span>
+      </a>
+      <a class="menu-card" href="/docente/finales/">
+        <div class="menu-card-icon green">📝</div>
+        <h3>Exámenes finales</h3>
+        <p>Cargá las notas de los exámenes finales de tus mesas asignadas.</p>
+        <span class="menu-card-arrow">→</span>
+      </a>
+    </div>
+  </div>
+
+</main>
+
+<script src="/app.js"></script>
+<script>
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('loginCard').style.display !== 'none') login();
+});
+
+// Restaurar sesión
+if (sessionStorage.getItem('docente_auth')) {
+  const doc = JSON.parse(sessionStorage.getItem('docente_data') || '{}');
+  mostrarMenu(doc);
+}
+
+async function login() {
+  const email    = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const status   = document.getElementById('loginStatus');
+  const btn      = document.getElementById('btnLogin');
+  clearStatus(status);
+
+  if (!email || !password) return setStatus(status, 'Ingresá correo y contraseña.', 'warn');
+  if (!validarEmail(email)) return setStatus(status, 'El correo no tiene un formato válido.', 'warn');
+
+  setLoading(btn, true, 'Ingresando...');
+  try {
+    const res  = await fetch(API + '/docente/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      sessionStorage.setItem('docente_auth', '1');
+      sessionStorage.setItem('docente_data', JSON.stringify(data.docente));
+      mostrarMenu(data.docente);
+    } else {
+      setStatus(status, data.error || 'Correo o contraseña incorrectos.', 'error');
+    }
+  } catch {
+    setStatus(status, 'No se pudo conectar con el servidor.', 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+function mostrarMenu(docente) {
+  document.getElementById('loginCard').style.display  = 'none';
+  document.getElementById('menuDocente').style.display = 'block';
+  document.getElementById('saludoDocente').textContent = `Hola, ${docente.nombre}`;
+  document.getElementById('saludoSub').textContent     = docente.apellido ? `Prof. ${docente.apellido}, ${docente.nombre}` : '';
+  document.getElementById('headerNav').innerHTML = `
+    <span class="text-sm text-muted">${esc(docente.email || '')}</span>
+    <button class="btn btn-secondary" onclick="cerrarSesion()">Salir</button>
+    <a class="btn btn-secondary" href="/inicio/">Menú</a>
+  `;
+}
+
+function cerrarSesion() {
+  sessionStorage.removeItem('docente_auth');
+  sessionStorage.removeItem('docente_data');
+  window.location.reload();
+}
+</script>
+</body>
+</html>

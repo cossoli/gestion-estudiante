@@ -590,6 +590,293 @@ try {
         respond(['ok' => true]);
     }
 
+    // ── Materias por carrera ──────────────────────────────────────────────────
+    if ($path === '/materias' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $idCarrera = (int) ($_GET['id_carrera'] ?? 0);
+        if ($idCarrera === 0) respond(['ok' => false, 'error' => 'Falta id_carrera.'], 400);
+        $stmt = $pdo->prepare("SELECT id_materia, nombre_materia, codigo_materia, formato, cuatrimestre, anio_plan FROM materias WHERE id_carrera = ? AND activa = TRUE ORDER BY anio_plan, nombre_materia");
+        $stmt->execute([$idCarrera]);
+        respond($stmt->fetchAll());
+    }
+
+    // ── Secretaría: listado de docentes ───────────────────────────────────────
+    if ($path === '/secretaria/docentes' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $stmt = $pdo->query("SELECT id_docente, apellido, nombre, email FROM docentes WHERE activo = TRUE ORDER BY apellido, nombre");
+        respond($stmt->fetchAll());
+    }
+
+    // ── Secretaría: mesas — listado ───────────────────────────────────────────
+    if ($path === '/secretaria/mesas' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $stmt = $pdo->query(
+            "SELECT mf.id_mesa, mf.id_materia, mf.id_docente, mf.anio, mf.turno,
+                    mf.fecha_mesa, mf.aula, mf.activa,
+                    m.nombre_materia, m.id_carrera,
+                    c.nombre_carrera,
+                    d.apellido || ', ' || d.nombre AS docente_nombre,
+                    COUNT(im.id_inscripcion) AS total_inscriptos
+             FROM mesas_finales mf
+             JOIN materias m ON m.id_materia = mf.id_materia
+             JOIN carreras c ON c.id_carrera = m.id_carrera
+             LEFT JOIN docentes d ON d.id_docente = mf.id_docente
+             LEFT JOIN inscripciones_mesas im ON im.id_mesa = mf.id_mesa
+             GROUP BY mf.id_mesa, m.nombre_materia, m.id_carrera, c.nombre_carrera, d.apellido, d.nombre
+             ORDER BY mf.anio DESC, mf.fecha_mesa DESC NULLS LAST"
+        );
+        respond($stmt->fetchAll());
+    }
+
+    // ── Secretaría: mesas — crear ─────────────────────────────────────────────
+    if ($path === '/secretaria/mesas' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data       = json_input();
+        $idMateria  = (int) ($data['id_materia'] ?? 0);
+        $turno      = trim($data['turno'] ?? '');
+        $anio       = (int) ($data['anio'] ?? 0);
+        $fechaMesa  = trim($data['fecha_mesa'] ?? '') ?: null;
+        $aula       = trim($data['aula'] ?? '') ?: null;
+        $idDocente  = (int) ($data['id_docente'] ?? 0) ?: null;
+        $activa     = (bool) ($data['activa'] ?? true);
+
+        if ($idMateria === 0 || $turno === '' || $anio === 0) {
+            respond(['ok' => false, 'error' => 'Faltan campos obligatorios.'], 400);
+        }
+        if (!in_array($turno, ['feb_mar','julio','nov_dic'], true)) {
+            respond(['ok' => false, 'error' => 'Turno inválido.'], 400);
+        }
+
+        $pdo->prepare(
+            "INSERT INTO mesas_finales (id_materia, id_docente, anio, turno, fecha_mesa, aula, activa)
+             VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )->execute([$idMateria, $idDocente, $anio, $turno, $fechaMesa, $aula, $activa]);
+
+        respond(['ok' => true, 'message' => 'Mesa creada correctamente.']);
+    }
+
+    // ── Secretaría: mesas — editar ────────────────────────────────────────────
+    if (preg_match('#^/secretaria/mesas/(\d+)$#', $path, $m) && $_SERVER['REQUEST_METHOD'] === 'PUT') {
+        $idMesa    = (int) $m[1];
+        $data      = json_input();
+
+        // Puede venir solo 'activa' (toggle) o todos los campos
+        if (isset($data['activa']) && count($data) === 1) {
+            $pdo->prepare("UPDATE mesas_finales SET activa = ? WHERE id_mesa = ?")
+                ->execute([$data['activa'], $idMesa]);
+        } else {
+            $idMateria = (int) ($data['id_materia'] ?? 0);
+            $turno     = trim($data['turno'] ?? '');
+            $anio      = (int) ($data['anio'] ?? 0);
+            $fechaMesa = trim($data['fecha_mesa'] ?? '') ?: null;
+            $aula      = trim($data['aula'] ?? '') ?: null;
+            $idDocente = (int) ($data['id_docente'] ?? 0) ?: null;
+            $activa    = (bool) ($data['activa'] ?? true);
+
+            if ($idMateria === 0 || $turno === '' || $anio === 0) {
+                respond(['ok' => false, 'error' => 'Faltan campos obligatorios.'], 400);
+            }
+            $pdo->prepare(
+                "UPDATE mesas_finales SET id_materia=?, id_docente=?, anio=?, turno=?, fecha_mesa=?, aula=?, activa=? WHERE id_mesa=?"
+            )->execute([$idMateria, $idDocente, $anio, $turno, $fechaMesa, $aula, $activa, $idMesa]);
+        }
+        respond(['ok' => true]);
+    }
+
+    // ── Secretaría: mesas — inscriptos ────────────────────────────────────────
+    if (preg_match('#^/secretaria/mesas/(\d+)/inscriptos$#', $path, $m) && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $idMesa = (int) $m[1];
+        $stmt   = $pdo->prepare(
+            "SELECT im.id_inscripcion, im.estado_condicion, im.resultado, im.nota_obtenida, im.obs_mesa,
+                    e.apellido, e.nombre, e.dni, e.correo
+             FROM inscripciones_mesas im
+             JOIN estudiantes e ON e.id_estudiante = im.id_estudiante
+             WHERE im.id_mesa = ?
+             ORDER BY e.apellido, e.nombre"
+        );
+        $stmt->execute([$idMesa]);
+        respond(['ok' => true, 'inscriptos' => $stmt->fetchAll()]);
+    }
+
+    // ── Secretaría: mesas — verificar condición ───────────────────────────────
+    if ($path === '/secretaria/mesas/verificar' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data   = json_input();
+        $idInsc = (int) ($data['id_inscripcion'] ?? 0);
+        $estado = trim($data['estado_condicion'] ?? '');
+        if ($idInsc === 0 || !in_array($estado, ['pendiente','apto','no_apto'], true)) {
+            respond(['ok' => false, 'error' => 'Datos inválidos.'], 400);
+        }
+        $pdo->prepare(
+            "UPDATE inscripciones_mesas SET estado_condicion = ?, condicion_verificada = ? WHERE id_inscripcion = ?"
+        )->execute([$estado, $estado !== 'pendiente', $idInsc]);
+        respond(['ok' => true]);
+    }
+
+    // ── Secretaría: mesas — cargar resultado ──────────────────────────────────
+    if ($path === '/secretaria/mesas/resultado' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data      = json_input();
+        $idInsc    = (int) ($data['id_inscripcion'] ?? 0);
+        $resultado = trim($data['resultado'] ?? '');
+        $nota      = isset($data['nota_obtenida']) && $data['nota_obtenida'] !== null ? (float) $data['nota_obtenida'] : null;
+        $obs       = trim($data['obs_mesa'] ?? '') ?: null;
+
+        if ($idInsc === 0 || !in_array($resultado, ['aprobado','reprobado','ausente'], true)) {
+            respond(['ok' => false, 'error' => 'Datos inválidos.'], 400);
+        }
+
+        $pdo->prepare(
+            "UPDATE inscripciones_mesas SET resultado = ?, nota_obtenida = ?, obs_mesa = ? WHERE id_inscripcion = ?"
+        )->execute([$resultado, $nota, $obs, $idInsc]);
+
+        respond(['ok' => true, 'message' => 'Resultado cargado correctamente.']);
+    }
+
+    // ── Docente: login ────────────────────────────────────────────────────────
+    if ($path === '/docente/login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data     = json_input();
+        $email    = trim($data['email'] ?? '');
+        $password = trim($data['password'] ?? '');
+
+        if ($email === '' || $password === '') {
+            respond(['ok' => false, 'error' => 'Correo y contraseña son obligatorios.'], 400);
+        }
+
+        $stmt = $pdo->prepare("SELECT * FROM docentes WHERE email = ? AND activo = TRUE");
+        $stmt->execute([$email]);
+        $docente = $stmt->fetch();
+
+        if (!$docente || !password_verify($password, $docente['password_hash'])) {
+            respond(['ok' => false, 'error' => 'Correo o contraseña incorrectos.'], 401);
+        }
+
+        respond(['ok' => true, 'docente' => [
+            'id_docente' => $docente['id_docente'],
+            'apellido'   => $docente['apellido'],
+            'nombre'     => $docente['nombre'],
+            'email'      => $docente['email'],
+        ]]);
+    }
+
+    // ── Docente: materias asignadas ───────────────────────────────────────────
+    if ($path === '/docente/materias' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $idDocente = (int) ($_GET['id_docente'] ?? 0);
+        if ($idDocente === 0) respond(['ok' => false, 'error' => 'Falta id_docente.'], 400);
+
+        $stmt = $pdo->prepare(
+            "SELECT m.id_materia, m.nombre_materia, m.codigo_materia, m.formato, m.cuatrimestre, m.anio_plan,
+                    c.nombre_carrera
+             FROM docente_materias dm
+             JOIN materias m ON m.id_materia = dm.id_materia
+             JOIN carreras c ON c.id_carrera = m.id_carrera
+             WHERE dm.id_docente = ? AND m.activa = TRUE
+             ORDER BY c.nombre_carrera, m.nombre_materia"
+        );
+        $stmt->execute([$idDocente]);
+        respond(['ok' => true, 'materias' => $stmt->fetchAll()]);
+    }
+
+    // ── Docente: alumnos de una cursada ───────────────────────────────────────
+    if ($path === '/docente/cursadas' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $idMateria    = (int) ($_GET['id_materia'] ?? 0);
+        $anioCursada  = (int) ($_GET['anio_cursada'] ?? date('Y'));
+        $cuatrimestre = $_GET['cuatrimestre_cursada'] ?? '';
+
+        if ($idMateria === 0) respond(['ok' => false, 'error' => 'Falta id_materia.'], 400);
+
+        // Si es anual, cuatrimestre puede ser NULL
+        if ($cuatrimestre === 'anual' || $cuatrimestre === '') {
+            $stmt = $pdo->prepare(
+                "SELECT cu.id_cursada, cu.resultado, cu.obs_cursada,
+                        e.apellido, e.nombre, e.dni, e.correo
+                 FROM cursadas cu
+                 JOIN estudiantes e ON e.id_estudiante = cu.id_estudiante
+                 WHERE cu.id_materia = ? AND cu.anio_cursada = ?
+                   AND cu.cuatrimestre_cursada IS NULL
+                 ORDER BY e.apellido, e.nombre"
+            );
+            $stmt->execute([$idMateria, $anioCursada]);
+        } else {
+            $stmt = $pdo->prepare(
+                "SELECT cu.id_cursada, cu.resultado, cu.obs_cursada,
+                        e.apellido, e.nombre, e.dni, e.correo
+                 FROM cursadas cu
+                 JOIN estudiantes e ON e.id_estudiante = cu.id_estudiante
+                 WHERE cu.id_materia = ? AND cu.anio_cursada = ?
+                   AND cu.cuatrimestre_cursada = ?
+                 ORDER BY e.apellido, e.nombre"
+            );
+            $stmt->execute([$idMateria, $anioCursada, (int) $cuatrimestre]);
+        }
+        respond(['ok' => true, 'alumnos' => $stmt->fetchAll()]);
+    }
+
+    // ── Docente: guardar resultado de cursada ─────────────────────────────────
+    if ($path === '/docente/cursadas/resultado' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data      = json_input();
+        $idCursada = (int) ($data['id_cursada'] ?? 0);
+        $resultado = trim($data['resultado'] ?? '');
+
+        if ($idCursada === 0 || !in_array($resultado, ['aprobado','desaprobado','promocion','ausente','abandono'], true)) {
+            respond(['ok' => false, 'error' => 'Datos inválidos.'], 400);
+        }
+
+        $pdo->prepare(
+            "UPDATE cursadas SET resultado = ?, fecha_resultado = CURRENT_DATE WHERE id_cursada = ?"
+        )->execute([$resultado, $idCursada]);
+
+        respond(['ok' => true]);
+    }
+
+    // ── Docente: mesas asignadas ──────────────────────────────────────────────
+    if ($path === '/docente/mesas' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $idDocente = (int) ($_GET['id_docente'] ?? 0);
+        if ($idDocente === 0) respond(['ok' => false, 'error' => 'Falta id_docente.'], 400);
+
+        $stmt = $pdo->prepare(
+            "SELECT mf.id_mesa, mf.anio, mf.turno, mf.fecha_mesa, mf.aula, mf.activa,
+                    m.nombre_materia, c.nombre_carrera,
+                    COUNT(im.id_inscripcion) AS total_inscriptos
+             FROM mesas_finales mf
+             JOIN materias m ON m.id_materia = mf.id_materia
+             JOIN carreras c ON c.id_carrera = m.id_carrera
+             LEFT JOIN inscripciones_mesas im ON im.id_mesa = mf.id_mesa
+             WHERE mf.id_docente = ?
+             GROUP BY mf.id_mesa, m.nombre_materia, c.nombre_carrera
+             ORDER BY mf.anio DESC, mf.fecha_mesa DESC NULLS LAST"
+        );
+        $stmt->execute([$idDocente]);
+        respond(['ok' => true, 'mesas' => $stmt->fetchAll()]);
+    }
+
+    // ── Docente: inscriptos de una mesa ───────────────────────────────────────
+    if (preg_match('#^/docente/mesas/(\d+)/inscriptos$#', $path, $m) && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $idMesa = (int) $m[1];
+        $stmt   = $pdo->prepare(
+            "SELECT im.id_inscripcion, im.estado_condicion, im.resultado, im.nota_obtenida,
+                    e.apellido, e.nombre, e.dni
+             FROM inscripciones_mesas im
+             JOIN estudiantes e ON e.id_estudiante = im.id_estudiante
+             WHERE im.id_mesa = ?
+             ORDER BY e.apellido, e.nombre"
+        );
+        $stmt->execute([$idMesa]);
+        respond(['ok' => true, 'inscriptos' => $stmt->fetchAll()]);
+    }
+
+    // ── Docente: guardar nota de examen final ─────────────────────────────────
+    if ($path === '/docente/mesas/resultado' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data      = json_input();
+        $idInsc    = (int) ($data['id_inscripcion'] ?? 0);
+        $resultado = trim($data['resultado'] ?? '');
+        $nota      = isset($data['nota_obtenida']) && $data['nota_obtenida'] !== null ? (float) $data['nota_obtenida'] : null;
+
+        if ($idInsc === 0 || !in_array($resultado, ['aprobado','reprobado','ausente'], true)) {
+            respond(['ok' => false, 'error' => 'Datos inválidos.'], 400);
+        }
+
+        $pdo->prepare(
+            "UPDATE inscripciones_mesas SET resultado = ?, nota_obtenida = ? WHERE id_inscripcion = ?"
+        )->execute([$resultado, $nota, $idInsc]);
+
+        respond(['ok' => true]);
+    }
+
     respond(['ok' => false, 'error' => 'Ruta no encontrada.'], 404);
 
 } catch (Throwable $e) {

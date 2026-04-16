@@ -204,6 +204,66 @@ CREATE TABLE inscripciones_mesas (
     CONSTRAINT fk_insc_mesa_mesa       FOREIGN KEY (id_mesa)       REFERENCES mesas_finales(id_mesa),
     CONSTRAINT uq_estudiante_mesa      UNIQUE (id_estudiante, id_mesa)
 );
+-- ─────────────────────────────────────────────────────────────────
+-- MIGRACIÓN: Módulo docentes + mesas de examen
+-- Ejecutar sobre la base existente
+-- ─────────────────────────────────────────────────────────────────
+
+-- ── DOCENTES ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS docentes (
+    id_docente SERIAL PRIMARY KEY,
+    apellido VARCHAR(100) NOT NULL,
+    nombre VARCHAR(100) NOT NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ── DOCENTE - MATERIAS (qué materias dicta cada docente) ──────────
+CREATE TABLE IF NOT EXISTS docente_materias (
+    id_docente INT NOT NULL,
+    id_materia INT NOT NULL,
+    PRIMARY KEY (id_docente, id_materia),
+    CONSTRAINT fk_dm_docente FOREIGN KEY (id_docente) REFERENCES docentes(id_docente) ON DELETE CASCADE,
+    CONSTRAINT fk_dm_materia FOREIGN KEY (id_materia) REFERENCES materias(id_materia) ON DELETE CASCADE
+);
+
+-- ── MESAS FINALES ─────────────────────────────────────────────────
+-- Ya existe en init.sql, pero por si no fue creada aún:
+CREATE TABLE IF NOT EXISTS mesas_finales (
+    id_mesa SERIAL PRIMARY KEY,
+    id_materia INT NOT NULL,
+    id_docente INT,
+    anio INT NOT NULL,
+    turno VARCHAR(20) NOT NULL
+        CHECK (turno IN ('feb_mar', 'julio', 'nov_dic')),
+    fecha_mesa DATE,
+    aula VARCHAR(100),
+    activa BOOLEAN NOT NULL DEFAULT TRUE,
+    CONSTRAINT fk_mesa_materia FOREIGN KEY (id_materia) REFERENCES materias(id_materia),
+    CONSTRAINT fk_mesa_docente FOREIGN KEY (id_docente) REFERENCES docentes(id_docente)
+);
+
+-- ── INSCRIPCIONES A MESAS ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS inscripciones_mesas (
+    id_inscripcion SERIAL PRIMARY KEY,
+    id_estudiante INT NOT NULL,
+    id_mesa INT NOT NULL,
+    fecha_inscripcion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    condicion_verificada BOOLEAN NOT NULL DEFAULT FALSE,
+    estado_condicion VARCHAR(20) NOT NULL DEFAULT 'pendiente'
+        CHECK (estado_condicion IN ('pendiente', 'apto', 'no_apto')),
+    nota_obtenida DECIMAL(4,2) CHECK (nota_obtenida >= 1 AND nota_obtenida <= 10 OR nota_obtenida IS NULL),
+    resultado VARCHAR(20)
+        CHECK (resultado IN ('aprobado', 'reprobado', 'ausente') OR resultado IS NULL),
+    obs_mesa TEXT,
+    CONSTRAINT fk_insc_mesa_estudiante FOREIGN KEY (id_estudiante) REFERENCES estudiantes(id_estudiante) ON DELETE CASCADE,
+    CONSTRAINT fk_insc_mesa_mesa       FOREIGN KEY (id_mesa)       REFERENCES mesas_finales(id_mesa),
+    CONSTRAINT uq_estudiante_mesa      UNIQUE (id_estudiante, id_mesa)
+);
+
+
 
 -- ─────────────────────────────────────────────────────────────────
 -- DATOS INICIALES
@@ -235,4 +295,40 @@ INSERT INTO materias (id_carrera, nombre_materia, codigo_materia, anio_plan, for
 (4, 'Pedagogía',           'TEA-101', 1, 'anual',         NULL),
 (4, 'Actuación I',         'TEA-102', 1, 'cuatrimestral', 1),
 (4, 'Expresión Corporal',  'TEA-103', 1, 'cuatrimestral', 1),
-(4, 'Didáctica General',   'TEA-104', 1, 'cuatrimestral', 2);
+(4, 'Didáctica General',   'TEA-104', 1, 'cuatrimestral', 2);-
+
+- ─────────────────────────────────────────────────────────────────
+-- Docentes de prueba — contraseña inicial: "docente123"
+-- Cambiar el hash si se desea otra contraseña
+-- ─────────────────────────────────────────────────────────────────
+
+-- Insertar docentes (contraseña: docente123)
+INSERT INTO docentes (apellido, nombre, email, password_hash) VALUES
+('García', 'Juan Carlos', 'jgarcia@ifdc.edu.ar', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'),
+('López', 'María Elena', 'mlopez@ifdc.edu.ar',  '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'),
+('Martínez', 'Roberto', 'rmartinez@ifdc.edu.ar','$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi');
+
+-- Asignar materias a docentes (ajustar id_materia según tu base)
+-- García dicta Álgebra I y Análisis Matemático I (Profesorado de Matemática)
+INSERT INTO docente_materias (id_docente, id_materia)
+SELECT d.id_docente, m.id_materia
+FROM docentes d, materias m
+WHERE d.email = 'jgarcia@ifdc.edu.ar'
+  AND m.codigo_materia IN ('MAT-102', 'MAT-103')
+ON CONFLICT DO NOTHING;
+
+-- López dicta Pedagogía y Didáctica General (todas las carreras)
+INSERT INTO docente_materias (id_docente, id_materia)
+SELECT d.id_docente, m.id_materia
+FROM docentes d, materias m
+WHERE d.email = 'mlopez@ifdc.edu.ar'
+  AND m.codigo_materia IN ('MAT-101','MAT-104','FIS-101','FIS-104','LYL-101','LYL-104','TEA-101','TEA-104')
+ON CONFLICT DO NOTHING;
+
+-- Martínez dicta Física General I y Matemática Aplicada
+INSERT INTO docente_materias (id_docente, id_materia)
+SELECT d.id_docente, m.id_materia
+FROM docentes d, materias m
+WHERE d.email = 'rmartinez@ifdc.edu.ar'
+  AND m.codigo_materia IN ('FIS-102', 'FIS-103')
+ON CONFLICT DO NOTHING;

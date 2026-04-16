@@ -297,38 +297,3 @@ INSERT INTO materias (id_carrera, nombre_materia, codigo_materia, anio_plan, for
 (4, 'Expresión Corporal',  'TEA-103', 1, 'cuatrimestral', 1),
 (4, 'Didáctica General',   'TEA-104', 1, 'cuatrimestral', 2);-
 
-- ─────────────────────────────────────────────────────────────────
--- Docentes de prueba — contraseña inicial: "docente123"
--- Cambiar el hash si se desea otra contraseña
--- ─────────────────────────────────────────────────────────────────
-
--- Insertar docentes (contraseña: docente123)
-INSERT INTO docentes (apellido, nombre, email, password_hash) VALUES
-('García', 'Juan Carlos', 'jgarcia@ifdc.edu.ar', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'),
-('López', 'María Elena', 'mlopez@ifdc.edu.ar',  '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'),
-('Martínez', 'Roberto', 'rmartinez@ifdc.edu.ar','$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi');
-
--- Asignar materias a docentes (ajustar id_materia según tu base)
--- García dicta Álgebra I y Análisis Matemático I (Profesorado de Matemática)
-INSERT INTO docente_materias (id_docente, id_materia)
-SELECT d.id_docente, m.id_materia
-FROM docentes d, materias m
-WHERE d.email = 'jgarcia@ifdc.edu.ar'
-  AND m.codigo_materia IN ('MAT-102', 'MAT-103')
-ON CONFLICT DO NOTHING;
-
--- López dicta Pedagogía y Didáctica General (todas las carreras)
-INSERT INTO docente_materias (id_docente, id_materia)
-SELECT d.id_docente, m.id_materia
-FROM docentes d, materias m
-WHERE d.email = 'mlopez@ifdc.edu.ar'
-  AND m.codigo_materia IN ('MAT-101','MAT-104','FIS-101','FIS-104','LYL-101','LYL-104','TEA-101','TEA-104')
-ON CONFLICT DO NOTHING;
-
--- Martínez dicta Física General I y Matemática Aplicada
-INSERT INTO docente_materias (id_docente, id_materia)
-SELECT d.id_docente, m.id_materia
-FROM docentes d, materias m
-WHERE d.email = 'rmartinez@ifdc.edu.ar'
-  AND m.codigo_materia IN ('FIS-102', 'FIS-103')
-ON CONFLICT DO NOTHING;

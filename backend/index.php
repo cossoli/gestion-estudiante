@@ -727,6 +727,64 @@ try {
         respond(['ok' => true, 'message' => 'Resultado cargado correctamente.']);
     }
 
+    // ── Docente: registro ─────────────────────────────────────────────────────
+    if ($path === '/docente/registro' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data     = json_input();
+        $apellido = trim($data['apellido'] ?? '');
+        $nombre   = trim($data['nombre']   ?? '');
+        $dni      = trim($data['dni']      ?? '');
+        $email    = trim($data['email']    ?? '') ?: null;
+        $carreras = $data['carreras']      ?? [];
+
+        if ($apellido === '' || $nombre === '' || $dni === '') {
+            respond(['ok' => false, 'error' => 'Apellido, nombre y DNI son obligatorios.'], 400);
+        }
+        if (!preg_match('/^\d{7,8}$/', $dni)) {
+            respond(['ok' => false, 'error' => 'El DNI debe tener 7 u 8 dígitos numéricos.'], 400);
+        }
+        if (!is_array($carreras) || count($carreras) === 0) {
+            respond(['ok' => false, 'error' => 'Seleccioná al menos un profesorado.'], 400);
+        }
+
+        // Verificar DNI único
+        $check = $pdo->prepare("SELECT id_docente FROM docentes WHERE dni = ?");
+        $check->execute([$dni]);
+        if ($check->fetch()) {
+            respond(['ok' => false, 'error' => 'Ya existe un docente con ese DNI.'], 409);
+        }
+
+        // Contraseña inicial = DNI
+        $hash = password_hash($dni, PASSWORD_DEFAULT);
+
+        $pdo->beginTransaction();
+
+        // Insertar docente
+        $pdo->prepare(
+            "INSERT INTO docentes (apellido, nombre, dni, email, password_hash) VALUES (?, ?, ?, ?, ?)"
+        )->execute([$apellido, $nombre, $dni, $email, $hash]);
+        $idDocente = (int) $pdo->lastInsertId();
+
+        // Asignar todas las materias de los profesorados seleccionados
+        $insMat = $pdo->prepare(
+            "INSERT INTO docente_materias (id_docente, id_materia)
+             SELECT ?, id_materia FROM materias WHERE id_carrera = ? AND activa = TRUE
+             ON CONFLICT DO NOTHING"
+        );
+        foreach ($carreras as $idCarrera) {
+            $insMat->execute([$idDocente, (int) $idCarrera]);
+        }
+
+        $pdo->commit();
+
+        respond(['ok' => true, 'docente' => [
+            'id_docente' => $idDocente,
+            'apellido'   => $apellido,
+            'nombre'     => $nombre,
+            'dni'        => $dni,
+            'email'      => $email,
+        ]]);
+    }
+
     // ── Docente: login por DNI ────────────────────────────────────────────────
     if ($path === '/docente/login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $data     = json_input();

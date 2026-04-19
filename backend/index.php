@@ -727,28 +727,29 @@ try {
         respond(['ok' => true, 'message' => 'Resultado cargado correctamente.']);
     }
 
-    // ── Docente: login ────────────────────────────────────────────────────────
+    // ── Docente: login por DNI ────────────────────────────────────────────────
     if ($path === '/docente/login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $data     = json_input();
-        $email    = trim($data['email'] ?? '');
+        $dni      = trim($data['dni'] ?? '');
         $password = trim($data['password'] ?? '');
 
-        if ($email === '' || $password === '') {
-            respond(['ok' => false, 'error' => 'Correo y contraseña son obligatorios.'], 400);
+        if ($dni === '' || $password === '') {
+            respond(['ok' => false, 'error' => 'DNI y contraseña son obligatorios.'], 400);
         }
 
-        $stmt = $pdo->prepare("SELECT * FROM docentes WHERE email = ? AND activo = TRUE");
-        $stmt->execute([$email]);
+        $stmt = $pdo->prepare("SELECT * FROM docentes WHERE dni = ? AND activo = TRUE");
+        $stmt->execute([$dni]);
         $docente = $stmt->fetch();
 
         if (!$docente || !password_verify($password, $docente['password_hash'])) {
-            respond(['ok' => false, 'error' => 'Correo o contraseña incorrectos.'], 401);
+            respond(['ok' => false, 'error' => 'DNI o contraseña incorrectos.'], 401);
         }
 
         respond(['ok' => true, 'docente' => [
             'id_docente' => $docente['id_docente'],
             'apellido'   => $docente['apellido'],
             'nombre'     => $docente['nombre'],
+            'dni'        => $docente['dni'],
             'email'      => $docente['email'],
         ]]);
     }

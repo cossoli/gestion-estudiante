@@ -26,20 +26,74 @@
 <main>
 
   <!-- Login -->
-  <div class="card card-sm" id="loginCard">
+  <div class="card card-sm" id="pantallaLogin">
     <h2 class="card-title">Acceso docente</h2>
-    <p class="card-subtitle">Ingresá con tu correo y contraseña institucional.</p>
+    <p class="card-subtitle">Ingresá con tu DNI y contraseña. Si es tu primera vez, registrate abajo.</p>
     <div class="grid" style="gap:14px">
       <div class="field">
-        <label class="field-label" for="email">Correo institucional</label>
-        <input id="email" type="email" placeholder="tu@ifdc.edu.ar" autocomplete="email">
+        <label class="field-label" for="dniLogin">DNI</label>
+        <input id="dniLogin" type="text" placeholder="Sin puntos, ej: 35123456"
+               inputmode="numeric" maxlength="8" autocomplete="username">
       </div>
       <div class="field">
         <label class="field-label" for="password">Contraseña</label>
         <input id="password" type="password" placeholder="Tu contraseña" autocomplete="current-password">
+        <span class="text-sm text-muted">Si es tu primera vez, tu contraseña es tu DNI.</span>
       </div>
       <div id="loginStatus" class="alert" style="display:none"></div>
       <button id="btnLogin" class="btn btn-primary btn-full" onclick="login()">Ingresar</button>
+      <div class="divider"></div>
+      <p class="text-sm text-muted text-center">
+        ¿No tenés cuenta?
+        <a href="#" onclick="mostrarRegistro()" style="color:var(--primary);font-weight:600">Registrarme</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Registro -->
+  <div class="card card-sm" id="pantallaRegistro" style="display:none">
+    <h2 class="card-title">Registrarme como docente</h2>
+    <p class="card-subtitle">Completá tus datos. Tu contraseña inicial será tu DNI.</p>
+    <div class="grid" style="gap:14px">
+
+      <div class="field">
+        <label class="field-label" for="regApellido">Apellido *</label>
+        <input id="regApellido" type="text" placeholder="Ej: García" autocomplete="family-name">
+      </div>
+      <div class="field">
+        <label class="field-label" for="regNombre">Nombre/s *</label>
+        <input id="regNombre" type="text" placeholder="Ej: Juan Carlos" autocomplete="given-name">
+      </div>
+      <div class="field">
+        <label class="field-label" for="regDni">DNI *</label>
+        <input id="regDni" type="text" placeholder="Sin puntos, ej: 35123456"
+               inputmode="numeric" maxlength="8">
+        <span class="text-sm text-muted">Será tu usuario y contraseña inicial.</span>
+      </div>
+      <div class="field">
+        <label class="field-label" for="regEmail">Correo electrónico</label>
+        <input id="regEmail" type="email" placeholder="tu@correo.com" autocomplete="email">
+      </div>
+
+      <!-- Selección de profesorados -->
+      <div class="field">
+        <label class="field-label">Profesorado/s en los que dictás clases *</label>
+        <div id="checkCarreras" style="display:grid;gap:10px;margin-top:4px">
+          <div class="text-sm text-muted">Cargando carreras...</div>
+        </div>
+        <span class="text-sm text-muted" style="margin-top:6px;display:block">
+          Podés seleccionar más de uno. Se te asignarán todas las materias de los profesorados elegidos.
+        </span>
+      </div>
+
+      <div id="registroStatus" class="alert" style="display:none"></div>
+
+      <button id="btnRegistro" class="btn btn-primary btn-full" onclick="registrar()">Crear mi cuenta</button>
+      <div class="divider"></div>
+      <p class="text-sm text-muted text-center">
+        ¿Ya tenés cuenta?
+        <a href="#" onclick="mostrarLogin()" style="color:var(--primary);font-weight:600">Ingresar</a>
+      </p>
     </div>
   </div>
 
@@ -47,21 +101,33 @@
   <div id="menuDocente" style="display:none">
     <div class="page-hero">
       <h1 id="saludoDocente">Panel docente</h1>
-      <p id="saludoSub"></p>
+      <p id="saludoSub" class="text-muted"></p>
+    </div>
+
+    <!-- Materias agrupadas por profesorado -->
+    <div id="materiasResumen" class="card" style="margin-bottom:20px;display:none">
+      <h3 class="card-title" style="margin-bottom:12px">Mis materias asignadas</h3>
+      <div id="materiasLista"></div>
     </div>
 
     <div class="menu-grid">
       <a class="menu-card" href="/docente/cursadas/">
         <div class="menu-card-icon blue">📚</div>
         <h3>Cursadas</h3>
-        <p>Cargá los resultados de las cursadas: aprobado, desaprobado, promoción, ausente o abandono.</p>
-        <span class="menu-card-arrow">→</span>
+        <p>Ver los alumnos anotados en tus materias del cuatrimestre actual y cargar sus resultados.</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <span id="badgeCursadas" class="pill pill-observado" style="display:none"></span>
+          <span class="menu-card-arrow">→</span>
+        </div>
       </a>
       <a class="menu-card" href="/docente/finales/">
         <div class="menu-card-icon green">📝</div>
         <h3>Exámenes finales</h3>
-        <p>Cargá las notas de los exámenes finales de tus mesas asignadas.</p>
-        <span class="menu-card-arrow">→</span>
+        <p>Ver los alumnos inscriptos a tus mesas de examen y cargar las notas finales.</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <span id="badgeFinales" class="pill pill-observado" style="display:none"></span>
+          <span class="menu-card-arrow">→</span>
+        </div>
       </a>
     </div>
   </div>
@@ -71,7 +137,9 @@
 <script src="/app.js"></script>
 <script>
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && document.getElementById('loginCard').style.display !== 'none') login();
+  if (e.key === 'Enter') {
+    if (document.getElementById('pantallaLogin').style.display !== 'none') login();
+  }
 });
 
 // Restaurar sesión
@@ -80,22 +148,57 @@ if (sessionStorage.getItem('docente_auth')) {
   mostrarMenu(doc);
 }
 
+function mostrarLogin() {
+  document.getElementById('pantallaRegistro').style.display = 'none';
+  document.getElementById('pantallaLogin').style.display    = 'block';
+}
+
+function mostrarRegistro() {
+  document.getElementById('pantallaLogin').style.display    = 'none';
+  document.getElementById('pantallaRegistro').style.display = 'block';
+  cargarCarreras();
+}
+
+// ── Cargar carreras para el registro ─────────────────────────────
+async function cargarCarreras() {
+  const cont = document.getElementById('checkCarreras');
+  try {
+    const res  = await fetch(API + '/carreras', { signal: AbortSignal.timeout(6000) });
+    const data = await res.json();
+    cont.innerHTML = data.map(c => `
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;
+                    border:1.5px solid var(--border);border-radius:var(--radius-sm);
+                    transition:border-color .15s,background .15s"
+             onmouseover="this.style.borderColor='var(--primary)'"
+             onmouseout="if(!this.querySelector('input').checked)this.style.borderColor='var(--border)'">
+        <input type="checkbox" value="${c.id_carrera}"
+               onchange="this.closest('label').style.borderColor=this.checked?'var(--primary)':'var(--border)';
+                         this.closest('label').style.background=this.checked?'var(--primary-light)':''">
+        <span style="font-weight:500;font-size:14px">${esc(c.nombre_carrera)}</span>
+      </label>
+    `).join('');
+  } catch {
+    cont.innerHTML = '<div class="alert alert-error"><span>✕</span><span>Error al cargar carreras.</span></div>';
+  }
+}
+
+// ── Login ─────────────────────────────────────────────────────────
 async function login() {
-  const email    = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value;
+  const dni      = document.getElementById('dniLogin').value.trim();
+  const password = document.getElementById('password').value.trim();
   const status   = document.getElementById('loginStatus');
   const btn      = document.getElementById('btnLogin');
   clearStatus(status);
 
-  if (!email || !password) return setStatus(status, 'Ingresá correo y contraseña.', 'warn');
-  if (!validarEmail(email)) return setStatus(status, 'El correo no tiene un formato válido.', 'warn');
+  if (!dni || !password) return setStatus(status, 'Ingresá tu DNI y contraseña.', 'warn');
+  if (!validarDNI(dni))  return setStatus(status, 'El DNI debe tener 7 u 8 dígitos numéricos.', 'warn');
 
   setLoading(btn, true, 'Ingresando...');
   try {
     const res  = await fetch(API + '/docente/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ dni, password }),
       signal: AbortSignal.timeout(8000)
     });
     const data = await res.json();
@@ -104,7 +207,7 @@ async function login() {
       sessionStorage.setItem('docente_data', JSON.stringify(data.docente));
       mostrarMenu(data.docente);
     } else {
-      setStatus(status, data.error || 'Correo o contraseña incorrectos.', 'error');
+      setStatus(status, data.error || 'DNI o contraseña incorrectos.', 'error');
     }
   } catch {
     setStatus(status, 'No se pudo conectar con el servidor.', 'error');
@@ -113,16 +216,114 @@ async function login() {
   }
 }
 
-function mostrarMenu(docente) {
-  document.getElementById('loginCard').style.display  = 'none';
-  document.getElementById('menuDocente').style.display = 'block';
-  document.getElementById('saludoDocente').textContent = `Hola, ${docente.nombre}`;
-  document.getElementById('saludoSub').textContent     = docente.apellido ? `Prof. ${docente.apellido}, ${docente.nombre}` : '';
+// ── Registro ──────────────────────────────────────────────────────
+async function registrar() {
+  const apellido = document.getElementById('regApellido').value.trim();
+  const nombre   = document.getElementById('regNombre').value.trim();
+  const dni      = document.getElementById('regDni').value.trim();
+  const email    = document.getElementById('regEmail').value.trim();
+  const status   = document.getElementById('registroStatus');
+  const btn      = document.getElementById('btnRegistro');
+
+  clearStatus(status);
+
+  // Carreras seleccionadas
+  const carrerasSeleccionadas = [...document.querySelectorAll('#checkCarreras input:checked')]
+    .map(el => parseInt(el.value));
+
+  if (!apellido || !nombre || !dni) return setStatus(status, 'Completá apellido, nombre y DNI.', 'warn');
+  if (!validarDNI(dni))             return setStatus(status, 'El DNI debe tener 7 u 8 dígitos numéricos.', 'warn');
+  if (email && !validarEmail(email)) return setStatus(status, 'El correo no tiene un formato válido.', 'warn');
+  if (!carrerasSeleccionadas.length) return setStatus(status, 'Seleccioná al menos un profesorado.', 'warn');
+
+  setLoading(btn, true, 'Creando cuenta...');
+  try {
+    const res  = await fetch(API + '/docente/registro', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apellido, nombre, dni, email: email || null, carreras: carrerasSeleccionadas }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      sessionStorage.setItem('docente_auth', '1');
+      sessionStorage.setItem('docente_data', JSON.stringify(data.docente));
+      mostrarMenu(data.docente);
+    } else {
+      setStatus(status, data.error || 'No se pudo crear la cuenta.', 'error');
+    }
+  } catch {
+    setStatus(status, 'No se pudo conectar con el servidor.', 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+// ── Menú ──────────────────────────────────────────────────────────
+async function mostrarMenu(docente) {
+  document.getElementById('pantallaLogin').style.display    = 'none';
+  document.getElementById('pantallaRegistro').style.display = 'none';
+  document.getElementById('menuDocente').style.display      = 'block';
+  document.getElementById('saludoDocente').textContent = `Hola, Prof. ${esc(docente.nombre)} ${esc(docente.apellido)}`;
+  document.getElementById('saludoSub').textContent     = `DNI: ${esc(docente.dni || '')}`;
   document.getElementById('headerNav').innerHTML = `
-    <span class="text-sm text-muted">${esc(docente.email || '')}</span>
+    <span class="text-sm text-muted">Prof. ${esc(docente.apellido)}, ${esc(docente.nombre)}</span>
     <button class="btn btn-secondary" onclick="cerrarSesion()">Salir</button>
     <a class="btn btn-secondary" href="/inicio/">Menú</a>
   `;
+  await cargarResumen(docente.id_docente);
+}
+
+async function cargarResumen(idDocente) {
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(API + '/docente/materias?id_docente=' + idDocente, { signal: AbortSignal.timeout(6000) }),
+      fetch(API + '/docente/mesas?id_docente='    + idDocente, { signal: AbortSignal.timeout(6000) })
+    ]);
+    const dataMat  = await r1.json();
+    const dataMesa = await r2.json();
+    const materias = dataMat.materias || [];
+    const mesas    = dataMesa.mesas   || [];
+
+    if (materias.length > 0) {
+      const b = document.getElementById('badgeCursadas');
+      b.textContent   = materias.length + ' materia' + (materias.length > 1 ? 's' : '');
+      b.style.display = 'inline-flex';
+    }
+
+    const mesasActivas = mesas.filter(m => m.activa);
+    if (mesasActivas.length > 0) {
+      const b = document.getElementById('badgeFinales');
+      b.textContent   = mesasActivas.length + ' mesa' + (mesasActivas.length > 1 ? 's' : '') + ' activa' + (mesasActivas.length > 1 ? 's' : '');
+      b.style.display = 'inline-flex';
+    }
+
+    if (materias.length > 0) {
+      const porCarrera = {};
+      materias.forEach(m => {
+        if (!porCarrera[m.nombre_carrera]) porCarrera[m.nombre_carrera] = [];
+        porCarrera[m.nombre_carrera].push(m);
+      });
+      document.getElementById('materiasLista').innerHTML = Object.entries(porCarrera).map(([carrera, mats]) => `
+        <div style="margin-bottom:14px">
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:8px">
+            ${esc(carrera)}
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            ${mats.map(m => `
+              <span class="pill" style="background:var(--primary-light);color:var(--primary)">
+                ${esc(m.nombre_materia)}
+                <span style="font-weight:400;color:var(--text-3)">
+                  · ${m.formato === 'cuatrimestral' ? m.cuatrimestre + '° cuatrim.' : 'Anual'}
+                </span>
+              </span>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+      document.getElementById('materiasResumen').style.display = 'block';
+    }
+  } catch { /* silencioso */ }
 }
 
 function cerrarSesion() {

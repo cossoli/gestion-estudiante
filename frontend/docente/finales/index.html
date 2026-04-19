@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Finales — Docente IFDC</title>
+  <title>Acceso docente — IFDC</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -14,252 +14,188 @@
       <div class="header-logo">I</div>
       <div>
         <div class="header-title">IFDC Río Colorado</div>
-        <div class="header-subtitle">Docente — Exámenes finales</div>
+        <div class="header-subtitle">Panel Docente</div>
       </div>
     </div>
-    <nav class="header-nav">
-      <a class="btn btn-secondary" href="/docente/">← Mi panel</a>
+    <nav class="header-nav" id="headerNav">
+      <a class="btn btn-secondary" href="/inicio/">← Menú principal</a>
     </nav>
   </div>
 </header>
 
 <main>
 
-  <div class="card card-sm" id="sinSesion" style="display:none">
-    <div class="alert alert-warn">
-      <span>⚠</span><span>Sesión no iniciada. <a href="/docente/" style="color:var(--warn);font-weight:700">Ingresá desde el panel docente.</a></span>
+  <!-- Login -->
+  <div class="card card-sm" id="loginCard">
+    <h2 class="card-title">Acceso docente</h2>
+    <p class="card-subtitle">Ingresá con tu DNI y contraseña. Si es tu primera vez, tu contraseña es tu número de DNI.</p>
+    <div class="grid" style="gap:14px">
+      <div class="field">
+        <label class="field-label" for="dni">DNI</label>
+        <input id="dni" type="text" placeholder="Sin puntos, ej: 35123456"
+               inputmode="numeric" maxlength="8" autocomplete="username">
+      </div>
+      <div class="field">
+        <label class="field-label" for="password">Contraseña</label>
+        <input id="password" type="password" placeholder="Tu contraseña" autocomplete="current-password">
+        <span class="text-sm text-muted">Si es tu primera vez, tu contraseña es tu DNI.</span>
+      </div>
+      <div id="loginStatus" class="alert" style="display:none"></div>
+      <button id="btnLogin" class="btn btn-primary btn-full" onclick="login()">Ingresar</button>
     </div>
   </div>
 
-  <div id="panelContent" style="display:none">
+  <!-- Menú docente -->
+  <div id="menuDocente" style="display:none">
     <div class="page-hero">
-      <h1>Exámenes finales</h1>
-      <p>Cargá las notas de los exámenes finales de tus mesas asignadas.</p>
+      <h1 id="saludoDocente">Panel docente</h1>
+      <p id="saludoSub" class="text-muted"></p>
     </div>
 
-    <!-- Mesas del docente -->
-    <div id="mesasGrid" class="grid" style="gap:16px"></div>
-    <div id="emptyMesas" class="empty-state card" style="display:none;padding:40px">
-      <div class="empty-state-icon">📝</div>
-      <p>No tenés mesas de examen asignadas.</p>
+    <!-- Materias agrupadas por profesorado -->
+    <div id="materiasResumen" class="card" style="margin-bottom:20px;display:none">
+      <h3 class="card-title" style="margin-bottom:12px">Mis materias asignadas</h3>
+      <div id="materiasLista"></div>
+    </div>
+
+    <div class="menu-grid">
+      <a class="menu-card" href="/docente/cursadas/">
+        <div class="menu-card-icon blue">📚</div>
+        <h3>Cursadas</h3>
+        <p>Ver los alumnos anotados en tus materias del cuatrimestre actual y cargar sus resultados.</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <span id="badgeCursadas" class="pill pill-observado" style="display:none"></span>
+          <span class="menu-card-arrow">→</span>
+        </div>
+      </a>
+      <a class="menu-card" href="/docente/finales/">
+        <div class="menu-card-icon green">📝</div>
+        <h3>Exámenes finales</h3>
+        <p>Ver los alumnos inscriptos a tus mesas de examen y cargar las notas finales.</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <span id="badgeFinales" class="pill pill-observado" style="display:none"></span>
+          <span class="menu-card-arrow">→</span>
+        </div>
+      </a>
     </div>
   </div>
 
 </main>
 
-<!-- Modal: alumnos de la mesa -->
-<div class="modal-overlay hidden" id="modalMesa">
-  <div class="modal" style="max-width:680px">
-    <h3 class="modal-title" id="modalMesaTitulo"></h3>
-    <p class="text-sm text-muted" id="modalMesaSub" style="margin-bottom:16px"></p>
-    <div id="modalMesaContent"></div>
-    <div class="modal-footer" style="margin-top:16px">
-      <button class="btn btn-secondary" onclick="cerrarModal()">Cerrar</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal confirmación -->
-<div class="modal-overlay hidden" id="modalConfirm">
-  <div class="modal">
-    <h3 class="modal-title" id="modalConfirmTitle">¿Confirmar?</h3>
-    <p class="modal-body text-sm text-muted" id="modalConfirmMsg"></p>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" id="modalConfirmCancel">Cancelar</button>
-      <button class="btn btn-primary" id="modalConfirmOk">Confirmar</button>
-    </div>
-  </div>
-</div>
-
 <script src="/app.js"></script>
 <script>
-let docenteData = null;
-let mesaActiva  = null;
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('loginCard').style.display !== 'none') login();
+});
 
-if (!sessionStorage.getItem('docente_auth')) {
-  document.getElementById('sinSesion').style.display    = 'block';
-} else {
-  docenteData = JSON.parse(sessionStorage.getItem('docente_data') || '{}');
-  document.getElementById('panelContent').style.display = 'block';
-  cargarMesas();
+// Restaurar sesión
+if (sessionStorage.getItem('docente_auth')) {
+  const doc = JSON.parse(sessionStorage.getItem('docente_data') || '{}');
+  mostrarMenu(doc);
 }
 
-async function cargarMesas() {
+async function login() {
+  const dni      = document.getElementById('dni').value.trim();
+  const password = document.getElementById('password').value.trim();
+  const status   = document.getElementById('loginStatus');
+  const btn      = document.getElementById('btnLogin');
+  clearStatus(status);
+
+  if (!dni || !password) return setStatus(status, 'Ingresá tu DNI y contraseña.', 'warn');
+  if (!validarDNI(dni))  return setStatus(status, 'El DNI debe tener 7 u 8 dígitos numéricos.', 'warn');
+
+  setLoading(btn, true, 'Ingresando...');
   try {
-    const res  = await fetch(API + '/docente/mesas?id_docente=' + docenteData.id_docente, { signal: AbortSignal.timeout(8000) });
-    const data = await res.json();
-    const mesas = data.mesas || [];
-    const grid  = document.getElementById('mesasGrid');
-    const empty = document.getElementById('emptyMesas');
-
-    if (!mesas.length) { grid.innerHTML = ''; empty.style.display = 'block'; return; }
-    empty.style.display = 'none';
-
-    const turnoLabel = { feb_mar: 'Feb - Mar', julio: 'Julio', nov_dic: 'Nov - Dic' };
-
-    grid.innerHTML = mesas.map(m => `
-      <div class="card" style="margin:0;border-left:4px solid ${m.activa ? 'var(--ok)' : 'var(--border-strong)'}">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px">
-          <div>
-            <div style="font-weight:700;font-size:16px">${esc(m.nombre_materia)}</div>
-            <div class="text-sm text-muted" style="margin-top:3px">
-              ${esc(m.nombre_carrera)} ·
-              ${turnoLabel[m.turno] || m.turno} ${esc(String(m.anio))}
-              ${m.fecha_mesa ? ' · ' + new Date(m.fecha_mesa).toLocaleDateString('es-AR') : ''}
-            </div>
-            ${m.aula ? `<div class="text-sm text-muted">📍 ${esc(m.aula)}</div>` : ''}
-          </div>
-          <div style="text-align:right">
-            ${m.activa ? '<span class="pill pill-aprobado">Activa</span>' : '<span class="pill pill-pendiente">Cerrada</span>'}
-            <div class="text-sm text-muted" style="margin-top:4px">${m.total_inscriptos || 0} inscripto${m.total_inscriptos !== 1 ? 's' : ''}</div>
-          </div>
-        </div>
-        <button class="btn btn-primary" style="font-size:13px;padding:7px 16px"
-          onclick="verAlumnos(${m.id_mesa}, '${esc(m.nombre_materia)}', '${turnoLabel[m.turno]} ${m.anio}')">
-          👥 Ver alumnos y cargar notas
-        </button>
-      </div>
-    `).join('');
-  } catch {
-    document.getElementById('mesasGrid').innerHTML =
-      '<div class="alert alert-error"><span>✕</span><span>Error al cargar mesas.</span></div>';
-  }
-}
-
-async function verAlumnos(idMesa, nombreMateria, turnoAnio) {
-  mesaActiva = idMesa;
-  document.getElementById('modalMesaTitulo').textContent = nombreMateria;
-  document.getElementById('modalMesaSub').textContent    = turnoAnio;
-  document.getElementById('modalMesaContent').innerHTML  =
-    '<div class="text-sm text-muted" style="padding:12px">Cargando...</div>';
-  document.getElementById('modalMesa').classList.remove('hidden');
-  await recargarAlumnos(idMesa);
-}
-
-async function recargarAlumnos(idMesa) {
-  try {
-    const res   = await fetch(API + '/docente/mesas/' + idMesa + '/inscriptos', { signal: AbortSignal.timeout(8000) });
-    const data  = await res.json();
-    const alumnos = data.inscriptos || [];
-
-    if (!alumnos.length) {
-      document.getElementById('modalMesaContent').innerHTML =
-        '<div class="empty-state" style="padding:24px"><div class="empty-state-icon">👥</div><p>No hay alumnos inscriptos todavía.</p></div>';
-      return;
-    }
-
-    document.getElementById('modalMesaContent').innerHTML = `
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Alumno</th>
-              <th>DNI</th>
-              <th>Condición</th>
-              <th>Resultado</th>
-              <th>Nota</th>
-              <th>Cargar nota</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${alumnos.map(a => {
-              const condPill = {
-                pendiente: '<span class="pill pill-pendiente">Pendiente</span>',
-                apto:      '<span class="pill pill-aprobado">Apto</span>',
-                no_apto:   '<span class="pill pill-rechazado">No apto</span>',
-              }[a.estado_condicion] || '';
-
-              const resPill = {
-                aprobado:  '<span class="pill pill-aprobado">Aprobado</span>',
-                reprobado: '<span class="pill pill-rechazado">Reprobado</span>',
-                ausente:   '<span class="pill pill-pendiente">Ausente</span>',
-              }[a.resultado] || '<span class="text-muted">—</span>';
-
-              const puedeCargar = a.estado_condicion === 'apto';
-
-              return `
-                <tr>
-                  <td>
-                    <div class="td-name">${esc(a.apellido)}, ${esc(a.nombre)}</div>
-                  </td>
-                  <td>${esc(a.dni)}</td>
-                  <td>${condPill}</td>
-                  <td>${resPill}</td>
-                  <td>${a.nota_obtenida != null ? '<strong>' + a.nota_obtenida + '</strong>' : '—'}</td>
-                  <td>
-                    ${puedeCargar ? `
-                      <div class="actions" style="gap:6px">
-                        <input type="number" id="nota-${a.id_inscripcion}" min="1" max="10" step="0.25"
-                          placeholder="Nota" value="${a.nota_obtenida || ''}"
-                          style="width:70px;padding:6px 8px;font-size:13px;border-radius:var(--radius-sm);border:1.5px solid var(--border)">
-                        <select id="res-${a.id_inscripcion}"
-                          style="padding:6px 8px;font-size:13px;border-radius:var(--radius-sm);border:1.5px solid var(--border);font:inherit">
-                          <option value="">Resultado</option>
-                          <option value="aprobado"  ${a.resultado==='aprobado' ?'selected':''}>Aprobado</option>
-                          <option value="reprobado" ${a.resultado==='reprobado'?'selected':''}>Reprobado</option>
-                          <option value="ausente"   ${a.resultado==='ausente'  ?'selected':''}>Ausente</option>
-                        </select>
-                        <button class="btn btn-primary" style="padding:6px 12px;font-size:12px"
-                          onclick="guardarNota(${a.id_inscripcion},'${esc(a.apellido)} ${esc(a.nombre)}')">
-                          ✓
-                        </button>
-                      </div>
-                    ` : `<span class="text-sm text-muted">${a.estado_condicion === 'no_apto' ? 'No apto' : 'Pend. verificación'}</span>`}
-                  </td>
-                </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-  } catch {
-    document.getElementById('modalMesaContent').innerHTML =
-      '<div class="alert alert-error"><span>✕</span><span>Error al cargar alumnos.</span></div>';
-  }
-}
-
-function cerrarModal() {
-  document.getElementById('modalMesa').classList.add('hidden');
-  mesaActiva = null;
-}
-
-async function guardarNota(idInscripcion, nombre) {
-  const nota      = parseFloat(document.getElementById('nota-' + idInscripcion)?.value);
-  const resultado = document.getElementById('res-' + idInscripcion)?.value;
-
-  if (!resultado) return alert('Seleccioná el resultado.');
-  if (resultado !== 'ausente' && (isNaN(nota) || nota < 1 || nota > 10)) {
-    return alert('Ingresá una nota válida entre 1 y 10.');
-  }
-
-  const ok = await confirmar({
-    titulo:  'Cargar nota',
-    mensaje: `¿Confirmás cargar nota ${resultado !== 'ausente' ? nota : ''} (${resultado}) para ${nombre}?`,
-    btnOk:   'Sí, guardar'
-  });
-  if (!ok) return;
-
-  try {
-    const res  = await fetch(API + '/docente/mesas/resultado', {
+    const res  = await fetch(API + '/docente/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id_inscripcion: idInscripcion,
-        resultado,
-        nota_obtenida: resultado !== 'ausente' ? nota : null
-      }),
+      body: JSON.stringify({ dni, password }),
       signal: AbortSignal.timeout(8000)
     });
     const data = await res.json();
     if (data.ok) {
-      await recargarAlumnos(mesaActiva);
-      await cargarMesas();
+      sessionStorage.setItem('docente_auth', '1');
+      sessionStorage.setItem('docente_data', JSON.stringify(data.docente));
+      mostrarMenu(data.docente);
     } else {
-      alert(data.error || 'Error al guardar.');
+      setStatus(status, data.error || 'DNI o contraseña incorrectos.', 'error');
     }
   } catch {
-    alert('No se pudo conectar con el servidor.');
+    setStatus(status, 'No se pudo conectar con el servidor.', 'error');
+  } finally {
+    setLoading(btn, false);
   }
+}
+
+async function mostrarMenu(docente) {
+  document.getElementById('loginCard').style.display   = 'none';
+  document.getElementById('menuDocente').style.display = 'block';
+  document.getElementById('saludoDocente').textContent = `Hola, Prof. ${esc(docente.nombre)} ${esc(docente.apellido)}`;
+  document.getElementById('saludoSub').textContent     = `DNI: ${esc(docente.dni || '')}`;
+  document.getElementById('headerNav').innerHTML = `
+    <span class="text-sm text-muted">Prof. ${esc(docente.apellido)}, ${esc(docente.nombre)}</span>
+    <button class="btn btn-secondary" onclick="cerrarSesion()">Salir</button>
+    <a class="btn btn-secondary" href="/inicio/">Menú</a>
+  `;
+  await cargarResumen(docente.id_docente);
+}
+
+async function cargarResumen(idDocente) {
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(API + '/docente/materias?id_docente=' + idDocente, { signal: AbortSignal.timeout(6000) }),
+      fetch(API + '/docente/mesas?id_docente='    + idDocente, { signal: AbortSignal.timeout(6000) })
+    ]);
+    const dataMat  = await r1.json();
+    const dataMesa = await r2.json();
+    const materias = dataMat.materias || [];
+    const mesas    = dataMesa.mesas   || [];
+
+    if (materias.length > 0) {
+      const b = document.getElementById('badgeCursadas');
+      b.textContent   = materias.length + ' materia' + (materias.length > 1 ? 's' : '');
+      b.style.display = 'inline-flex';
+    }
+
+    const mesasActivas = mesas.filter(m => m.activa);
+    if (mesasActivas.length > 0) {
+      const b = document.getElementById('badgeFinales');
+      b.textContent   = mesasActivas.length + ' mesa' + (mesasActivas.length > 1 ? 's' : '') + ' activa' + (mesasActivas.length > 1 ? 's' : '');
+      b.style.display = 'inline-flex';
+    }
+
+    if (materias.length > 0) {
+      const porCarrera = {};
+      materias.forEach(m => {
+        if (!porCarrera[m.nombre_carrera]) porCarrera[m.nombre_carrera] = [];
+        porCarrera[m.nombre_carrera].push(m);
+      });
+      document.getElementById('materiasLista').innerHTML = Object.entries(porCarrera).map(([carrera, mats]) => `
+        <div style="margin-bottom:14px">
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:8px">
+            ${esc(carrera)}
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            ${mats.map(m => `
+              <span class="pill" style="background:var(--primary-light);color:var(--primary)">
+                ${esc(m.nombre_materia)}
+                <span style="font-weight:400;color:var(--text-3)">
+                  · ${m.formato === 'cuatrimestral' ? m.cuatrimestre + '° cuatrim.' : 'Anual'}
+                </span>
+              </span>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+      document.getElementById('materiasResumen').style.display = 'block';
+    }
+  } catch { /* silencioso */ }
+}
+
+function cerrarSesion() {
+  sessionStorage.removeItem('docente_auth');
+  sessionStorage.removeItem('docente_data');
+  window.location.reload();
 }
 </script>
 </body>

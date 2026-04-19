@@ -34,22 +34,27 @@ function assign_initial_subjects(PDO $pdo, int $studentId): void {
     $student = $studentStmt->fetch();
     if (!$student) return;
 
+    // Solo se inscriben automáticamente las materias del 1° cuatrimestre del 1° año.
+    // Alumnos de años superiores deben solicitar inscripción a Secretaría.
+    if ((int) $student['anio_actual'] !== 1) return;
+
     $anioLectivo = (int) date('Y');
     $subjectStmt = $pdo->prepare(
         "SELECT id_materia
          FROM materias
          WHERE id_carrera = ?
-           AND anio_plan = ?
+           AND anio_plan = 1
            AND activa = TRUE
-           AND (formato = 'anual' OR (formato = 'cuatrimestral' AND cuatrimestre = 1))"
+           AND formato = 'cuatrimestral'
+           AND cuatrimestre = 1"
     );
-    $subjectStmt->execute([$student['id_carrera'], $student['anio_actual']]);
+    $subjectStmt->execute([$student['id_carrera']]);
     $subjects = $subjectStmt->fetchAll();
 
     $insert = $pdo->prepare(
         "INSERT INTO inscripciones_materias
             (id_estudiante, id_materia, anio_lectivo, tipo_inscripcion, estado_secretaria, habilitada, observaciones)
-         VALUES (?, ?, ?, 'automatica', 'habilitado', TRUE, 'Alta inicial aprobada por Secretaría')
+         VALUES (?, ?, ?, 'automatica', 'habilitado', TRUE, 'Alta inicial — 1° cuatrimestre 1° año')
          ON CONFLICT (id_estudiante, id_materia, anio_lectivo) DO NOTHING"
     );
     foreach ($subjects as $subject) {

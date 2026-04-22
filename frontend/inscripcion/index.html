@@ -17,8 +17,7 @@
       background: var(--primary-light);
       border: 2px solid var(--primary);
       border-radius: var(--radius);
-      padding: 20px 24px;
-      margin: 20px 0;
+      padding: 20px 24px; margin: 20px 0;
     }
     .credencial-row {
       display: flex; justify-content: space-between; align-items: center;
@@ -28,6 +27,14 @@
     .credencial-label { color: var(--text-2); font-weight: 500; }
     .credencial-value { font-weight: 700; color: var(--primary); font-size: 17px; }
     .credencial-note  { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+    .carrera-check {
+      display: flex; align-items: center; gap: 10px; cursor: pointer;
+      padding: 12px 14px; border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm); transition: border-color .15s, background .15s;
+    }
+    .carrera-check:hover { border-color: var(--primary); }
+    .carrera-check.selected { border-color: var(--primary); background: var(--primary-light); }
+    .carrera-check input { width: auto; }
   </style>
 </head>
 <body>
@@ -60,7 +67,6 @@
         <h2 class="card-title">¡Inscripción enviada!</h2>
         <p class="text-sm text-muted">Tu inscripción fue recibida y quedará pendiente de revisión por Secretaría.</p>
       </div>
-
       <div class="credencial">
         <div style="font-size:13px;font-weight:700;color:var(--text-2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.05em">
           📋 Tus datos de acceso
@@ -80,12 +86,10 @@
           <div class="credencial-value" id="okPass"></div>
         </div>
       </div>
-
       <div class="alert alert-warn" style="margin-bottom:20px">
         <span>⚠</span>
         <span>Guardá estos datos. Los necesitás para ingresar al sistema.</span>
       </div>
-
       <div class="grid" style="gap:10px">
         <a class="btn btn-primary btn-full" href="/panel/">Ir a mi panel →</a>
         <button class="btn btn-secondary btn-full" onclick="verFormulario()">Ver / editar mi inscripción</button>
@@ -147,30 +151,30 @@
             <input id="fecha_nacimiento" name="fecha_nacimiento" type="date">
           </div>
           <div class="field">
-            <label class="field-label" for="localidad">Localidad Recidencia</label>
+            <label class="field-label" for="localidad">Localidad</label>
             <input id="localidad" name="localidad" placeholder="Ej: Río Colorado">
           </div>
           <div class="field col-full">
-            <label class="field-label" for="domicilio">Domicilio Actual</label>
+            <label class="field-label" for="domicilio">Domicilio</label>
             <input id="domicilio" name="domicilio" placeholder="Calle, número, barrio">
           </div>
-          <div class="field">
-            <label class="field-label" for="id_carrera">Carrera *</label>
-            <select id="id_carrera" name="id_carrera" required>
-              <option value="">Cargando...</option>
-            </select>
+
+          <!-- Selección de carreras -->
+          <div class="field col-full">
+            <label class="field-label">Profesorado/s al que te inscribís *</label>
+            <div id="checkCarreras" class="grid" style="gap:10px;margin-top:6px">
+              <div class="text-sm text-muted">Cargando carreras...</div>
+            </div>
+            <span class="text-sm text-muted" style="margin-top:6px;display:block">
+              Podés seleccionar más de uno. Serás inscripto como ingresante de 1° año en cada profesorado elegido.
+            </span>
           </div>
+
+          <!-- Año de cohorte -->
           <div class="field">
-            <label class="field-label" for="anio_actual">Año que cursás *</label>
-            <select id="anio_actual" name="anio_actual" required>
-              <option value="">Seleccioná el año</option>
-              <option value="1">1° año</option>
-              </select>
-          </div>
-          <div class="field">
-            <label class="field-label" for="anio_cohorte">Año de cohorte (ingreso)</label>
+            <label class="field-label" for="anio_cohorte">Año de ingreso (cohorte)</label>
             <input id="anio_cohorte" name="anio_cohorte" type="number"
-                   placeholder="Ej: 2024" min="2000" max="2099" inputmode="numeric">
+                   placeholder="Ej: 2025" min="2000" max="2099" inputmode="numeric">
           </div>
 
           <div class="col-full">
@@ -232,10 +236,10 @@
 const dniSesion = localStorage.getItem('estudiante_dni');
 
 if (dniSesion) {
-  document.getElementById('headerDni').textContent      = 'DNI: ' + dniSesion;
-  document.getElementById('btnSalir').style.display     = '';
-  document.getElementById('btnPanel').style.display     = '';
-  document.getElementById('btnIrPanel').style.display   = '';
+  document.getElementById('headerDni').textContent    = 'DNI: ' + dniSesion;
+  document.getElementById('btnSalir').style.display   = '';
+  document.getElementById('btnPanel').style.display   = '';
+  document.getElementById('btnIrPanel').style.display = '';
   document.getElementById('dni').value    = dniSesion;
   document.getElementById('dni').readOnly = true;
 }
@@ -261,22 +265,31 @@ function mostrarArchivo(input, fieldId, nameId) {
   }
 }
 
+// Cargar carreras con checkboxes
 async function cargarCarreras() {
-  const sel = document.getElementById('id_carrera');
+  const cont = document.getElementById('checkCarreras');
   try {
     const res  = await fetch(API + '/carreras', { signal: AbortSignal.timeout(6000) });
     const data = await res.json();
-    sel.innerHTML = '<option value="">Seleccioná una carrera</option>';
-    data.forEach(c => {
-      const o = document.createElement('option');
-      o.value = c.id_carrera; o.textContent = c.nombre_carrera;
-      sel.appendChild(o);
-    });
+    cont.innerHTML = data.map(c => `
+      <label class="carrera-check" id="label-carr-${c.id_carrera}">
+        <input type="checkbox" name="carreras" value="${c.id_carrera}"
+               onchange="toggleCarrera(this, ${c.id_carrera})">
+        <span style="font-weight:500;font-size:14px">${esc(c.nombre_carrera)}</span>
+      </label>
+    `).join('');
   } catch {
-    sel.innerHTML = '<option value="">Error al cargar carreras</option>';
+    cont.innerHTML = '<div class="alert alert-error"><span>✕</span><span>Error al cargar carreras.</span></div>';
   }
 }
 
+function toggleCarrera(input, id) {
+  const label = document.getElementById('label-carr-' + id);
+  if (input.checked) label.classList.add('selected');
+  else               label.classList.remove('selected');
+}
+
+// Cargar perfil existente
 async function cargarPerfil(dni) {
   if (!dni) return;
   try {
@@ -284,11 +297,17 @@ async function cargarPerfil(dni) {
     const data = await res.json();
     if (data.inscripto) {
       const s = data.data;
-      ['apellido','nombre','correo','telefono','fecha_nacimiento','domicilio','localidad','anio_actual','anio_cohorte'].forEach(k => {
+      ['apellido','nombre','correo','telefono','fecha_nacimiento','domicilio','localidad','anio_cohorte'].forEach(k => {
         const el = document.getElementById(k);
         if (el && s[k] != null) el.value = s[k];
       });
-      if (s.id_carrera) document.getElementById('id_carrera').value = s.id_carrera;
+      // Marcar carreras
+      if (data.carreras && data.carreras.length) {
+        data.carreras.forEach(c => {
+          const cb = document.querySelector(`input[name="carreras"][value="${c.id_carrera}"]`);
+          if (cb) { cb.checked = true; toggleCarrera(cb, c.id_carrera); }
+        });
+      }
       mostrarEstado(s.estado_general);
     }
   } catch { /* silencioso */ }
@@ -325,9 +344,11 @@ async function enviar(e) {
   clearStatus(status);
 
   const dni = document.getElementById('dni').value.trim();
-  if (!validarDNI(dni))                                return setStatus(status, 'El DNI debe tener 7 u 8 dígitos numéricos.', 'warn');
-  if (!document.getElementById('id_carrera').value)   return setStatus(status, 'Seleccioná una carrera.', 'warn');
-  if (!document.getElementById('anio_actual').value)  return setStatus(status, 'Seleccioná el año que cursás.', 'warn');
+  const carrerasSeleccionadas = [...document.querySelectorAll('input[name="carreras"]:checked')]
+    .map(el => parseInt(el.value));
+
+  if (!validarDNI(dni))              return setStatus(status, 'El DNI debe tener 7 u 8 dígitos numéricos.', 'warn');
+  if (!carrerasSeleccionadas.length) return setStatus(status, 'Seleccioná al menos un profesorado.', 'warn');
 
   const esNuevo = !dniSesion;
   const ok = await confirmar({
@@ -344,6 +365,9 @@ async function enviar(e) {
 
   try {
     const fd = new FormData(document.getElementById('form'));
+    // Agregar carreras como JSON
+    fd.append('carreras_json', JSON.stringify(carrerasSeleccionadas));
+
     const res  = await fetch(API + '/inscripcion', {
       method: 'POST', body: fd,
       signal: AbortSignal.timeout(20000)

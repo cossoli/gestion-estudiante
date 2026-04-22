@@ -5,6 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Acceso docente — IFDC</title>
   <link rel="stylesheet" href="/styles.css">
+  <style>
+    .carrera-bloque {
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .carrera-bloque-header {
+      background: var(--surface2);
+      padding: 12px 16px;
+      display: flex; align-items: center; gap: 10px;
+      cursor: pointer; user-select: none;
+    }
+    .carrera-bloque-header input { width: auto; }
+    .carrera-bloque-header span { font-weight: 600; font-size: 14px; }
+    .carrera-materias {
+      padding: 12px 16px;
+      display: none;
+      border-top: 1px solid var(--border);
+    }
+    .carrera-materias.visible { display: block; }
+    .materia-check {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px; font-size: 13px; cursor: pointer;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      transition: border-color .15s, background .15s;
+      margin-bottom: 6px;
+    }
+    .materia-check:hover { border-color: var(--primary); background: var(--primary-light); }
+    .materia-check.checked { border-color: var(--ok); background: var(--ok-bg); }
+    .materia-check input { width: auto; cursor: pointer; accent-color: var(--ok); width: 16px; height: 16px; }
+    .materia-anio {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--text-3);
+      padding: 12px 0 6px; margin-top: 4px;
+      border-top: 1px solid var(--border);
+    }
+    .materia-anio:first-child { border-top: none; margin-top: 0; padding-top: 4px; }
+  </style>
 </head>
 <body>
 
@@ -51,39 +91,43 @@
   </div>
 
   <!-- Registro -->
-  <div class="card card-sm" id="pantallaRegistro" style="display:none">
+  <div class="card" id="pantallaRegistro" style="display:none;max-width:600px;margin:0 auto">
     <h2 class="card-title">Registrarme como docente</h2>
-    <p class="card-subtitle">Completá tus datos. Tu contraseña inicial será tu DNI.</p>
+    <p class="card-subtitle">Completá tus datos y seleccioná las materias que dictás en cada profesorado.</p>
     <div class="grid" style="gap:14px">
 
-      <div class="field">
-        <label class="field-label" for="regApellido">Apellido *</label>
-        <input id="regApellido" type="text" placeholder="Ej: García" autocomplete="family-name">
+      <div class="grid grid-2" style="gap:14px">
+        <div class="field">
+          <label class="field-label" for="regApellido">Apellido *</label>
+          <input id="regApellido" type="text" placeholder="Ej: García" autocomplete="family-name">
+        </div>
+        <div class="field">
+          <label class="field-label" for="regNombre">Nombre/s *</label>
+          <input id="regNombre" type="text" placeholder="Ej: Juan Carlos" autocomplete="given-name">
+        </div>
       </div>
-      <div class="field">
-        <label class="field-label" for="regNombre">Nombre/s *</label>
-        <input id="regNombre" type="text" placeholder="Ej: Juan Carlos" autocomplete="given-name">
-      </div>
+
       <div class="field">
         <label class="field-label" for="regDni">DNI *</label>
         <input id="regDni" type="text" placeholder="Sin puntos, ej: 35123456"
                inputmode="numeric" maxlength="8">
         <span class="text-sm text-muted">Será tu usuario y contraseña inicial.</span>
       </div>
+
       <div class="field">
         <label class="field-label" for="regEmail">Correo electrónico</label>
         <input id="regEmail" type="email" placeholder="tu@correo.com" autocomplete="email">
       </div>
 
-      <!-- Selección de profesorados -->
+      <!-- Profesorados y materias -->
       <div class="field">
-        <label class="field-label">Profesorado/s en los que dictás clases *</label>
-        <div id="checkCarreras" style="display:grid;gap:10px;margin-top:4px">
-          <div class="text-sm text-muted">Cargando carreras...</div>
-        </div>
-        <span class="text-sm text-muted" style="margin-top:6px;display:block">
-          Podés seleccionar más de uno. Se te asignarán todas las materias de los profesorados elegidos.
+        <label class="field-label">Seleccioná las materias que dictás *</label>
+        <span class="text-sm text-muted" style="display:block;margin-bottom:10px">
+          Hacé clic en el nombre del profesorado para expandirlo y tildar tus materias.
         </span>
+        <div id="bloqueCarreras">
+          <div class="text-sm text-muted">Cargando...</div>
+        </div>
       </div>
 
       <div id="registroStatus" class="alert" style="display:none"></div>
@@ -104,7 +148,6 @@
       <p id="saludoSub" class="text-muted"></p>
     </div>
 
-    <!-- Materias agrupadas por profesorado -->
     <div id="materiasResumen" class="card" style="margin-bottom:20px;display:none">
       <h3 class="card-title" style="margin-bottom:12px">Mis materias asignadas</h3>
       <div id="materiasLista"></div>
@@ -136,15 +179,15 @@
 
 <script src="/app.js"></script>
 <script>
+let materiasCache = {}; // { id_carrera: [materias] }
+
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    if (document.getElementById('pantallaLogin').style.display !== 'none') login();
-  }
+  if (e.key === 'Enter' && document.getElementById('pantallaLogin').style.display !== 'none') login();
 });
 
 // Restaurar sesión
-if (sessionStorage.getItem('docente_auth')) {
-  const doc = JSON.parse(sessionStorage.getItem('docente_data') || '{}');
+if (localStorage.getItem('docente_auth')) {
+  const doc = JSON.parse(localStorage.getItem('docente_data') || '{}');
   mostrarMenu(doc);
 }
 
@@ -153,33 +196,123 @@ function mostrarLogin() {
   document.getElementById('pantallaLogin').style.display    = 'block';
 }
 
-function mostrarRegistro() {
+async function mostrarRegistro() {
   document.getElementById('pantallaLogin').style.display    = 'none';
   document.getElementById('pantallaRegistro').style.display = 'block';
-  cargarCarreras();
+  await cargarBloqueCarreras();
 }
 
-// ── Cargar carreras para el registro ─────────────────────────────
-async function cargarCarreras() {
-  const cont = document.getElementById('checkCarreras');
+// ── Cargar profesorados con materias ─────────────────────────────
+async function cargarBloqueCarreras() {
+  const cont = document.getElementById('bloqueCarreras');
   try {
-    const res  = await fetch(API + '/carreras', { signal: AbortSignal.timeout(6000) });
-    const data = await res.json();
-    cont.innerHTML = data.map(c => `
-      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;
-                    border:1.5px solid var(--border);border-radius:var(--radius-sm);
-                    transition:border-color .15s,background .15s"
-             onmouseover="this.style.borderColor='var(--primary)'"
-             onmouseout="if(!this.querySelector('input').checked)this.style.borderColor='var(--border)'">
-        <input type="checkbox" value="${c.id_carrera}"
-               onchange="this.closest('label').style.borderColor=this.checked?'var(--primary)':'var(--border)';
-                         this.closest('label').style.background=this.checked?'var(--primary-light)':''">
-        <span style="font-weight:500;font-size:14px">${esc(c.nombre_carrera)}</span>
-      </label>
-    `).join('');
+    const res     = await fetch(API + '/carreras', { signal: AbortSignal.timeout(6000) });
+    const carreras = await res.json();
+
+    // Cargar materias de todas las carreras en paralelo
+    await Promise.all(carreras.map(async c => {
+      const r    = await fetch(API + '/materias?id_carrera=' + c.id_carrera, { signal: AbortSignal.timeout(6000) });
+      const data = await r.json();
+      materiasCache[c.id_carrera] = data;
+    }));
+
+    cont.innerHTML = carreras.map(c => {
+      const materias = materiasCache[c.id_carrera] || [];
+      // Agrupar por año
+      const porAnio = {};
+      materias.forEach(m => {
+        if (!porAnio[m.anio_plan]) porAnio[m.anio_plan] = [];
+        porAnio[m.anio_plan].push(m);
+      });
+
+      return `
+        <div class="carrera-bloque">
+          <div class="carrera-bloque-header" onclick="toggleBloque(${c.id_carrera})">
+            <span style="font-size:16px">📚</span>
+            <span>${esc(c.nombre_carrera)}</span>
+            <span id="badge-${c.id_carrera}" style="font-size:12px;color:var(--ok);font-weight:600;margin-left:8px"></span>
+            <span style="margin-left:auto;font-size:12px;color:var(--text-3)" id="arrow-${c.id_carrera}">▶ Expandir</span>
+          </div>
+          <div class="carrera-materias" id="materias-${c.id_carrera}">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <span class="text-sm text-muted">Tildá las materias que dictás:</span>
+              <div class="actions" style="gap:6px">
+                <button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:12px"
+                  onclick="seleccionarTodas(${c.id_carrera}, true)">Todas</button>
+                <button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:12px"
+                  onclick="seleccionarTodas(${c.id_carrera}, false)">Ninguna</button>
+              </div>
+            </div>
+            ${Object.entries(porAnio).map(([anio, mats]) => `
+              <div class="materia-anio">${anio}° año</div>
+              ${mats.map(m => `
+                <label class="materia-check" id="lbl-${c.id_carrera}-${m.id_materia}">
+                  <input type="checkbox" class="mat-check-${c.id_carrera}" value="${m.id_materia}"
+                    onchange="actualizarVisualMateria(this.closest('label'), this.checked); actualizarContador(this)">
+                  <span style="flex:1">
+                    <strong>${esc(m.nombre_materia)}</strong>
+                    <span style="color:var(--text-3);font-size:12px;margin-left:6px">
+                      ${m.formato === 'anual' ? 'Anual' : m.cuatrimestre + '° cuatrim.'}
+                    </span>
+                  </span>
+                  <span class="check-icon" style="font-size:16px;opacity:0;transition:opacity .15s">✓</span>
+                </label>
+              `).join('')}
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
   } catch {
-    cont.innerHTML = '<div class="alert alert-error"><span>✕</span><span>Error al cargar carreras.</span></div>';
+    cont.innerHTML = '<div class="alert alert-error"><span>✕</span><span>Error al cargar.</span></div>';
   }
+}
+
+function toggleBloque(idCarrera) {
+  const bloque = document.getElementById('materias-' + idCarrera);
+  const arrow  = document.getElementById('arrow-' + idCarrera);
+  const visible = bloque.classList.toggle('visible');
+  arrow.textContent = visible ? '▼ Contraer' : '▶ Expandir';
+}
+
+function toggleMateria(label) {
+  const cb = label.querySelector('input[type="checkbox"]');
+  cb.checked = !cb.checked;
+  actualizarVisualMateria(label, cb.checked);
+  actualizarContador(cb);
+}
+
+function actualizarVisualMateria(label, checked) {
+  const icon = label.querySelector('.check-icon');
+  if (checked) {
+    label.classList.add('checked');
+    icon.style.opacity = '1';
+  } else {
+    label.classList.remove('checked');
+    icon.style.opacity = '0';
+  }
+}
+
+function actualizarContador(cb) {
+  // Extraer id carrera de la clase
+  const clase = [...cb.classList].find(c => c.startsWith('mat-check-'));
+  if (!clase) return;
+  const idCarrera = clase.replace('mat-check-', '');
+  const total = document.querySelectorAll('.mat-check-' + idCarrera).length;
+  const sel   = document.querySelectorAll('.mat-check-' + idCarrera + ':checked').length;
+  const badge = document.getElementById('badge-' + idCarrera);
+  if (badge) badge.textContent = sel > 0 ? sel + ' de ' + total + ' seleccionadas' : '';
+}
+
+function seleccionarTodas(idCarrera, checked) {
+  document.querySelectorAll('.mat-check-' + idCarrera).forEach(cb => {
+    cb.checked = checked;
+    const label = cb.closest('label');
+    if (label) actualizarVisualMateria(label, checked);
+  });
+  const total = document.querySelectorAll('.mat-check-' + idCarrera).length;
+  const badge = document.getElementById('badge-' + idCarrera);
+  if (badge) badge.textContent = checked ? total + ' de ' + total + ' seleccionadas' : '';
 }
 
 // ── Login ─────────────────────────────────────────────────────────
@@ -203,8 +336,8 @@ async function login() {
     });
     const data = await res.json();
     if (data.ok) {
-      sessionStorage.setItem('docente_auth', '1');
-      sessionStorage.setItem('docente_data', JSON.stringify(data.docente));
+      localStorage.setItem('docente_auth', '1');
+      localStorage.setItem('docente_data', JSON.stringify(data.docente));
       mostrarMenu(data.docente);
     } else {
       setStatus(status, data.error || 'DNI o contraseña incorrectos.', 'error');
@@ -227,27 +360,27 @@ async function registrar() {
 
   clearStatus(status);
 
-  // Carreras seleccionadas
-  const carrerasSeleccionadas = [...document.querySelectorAll('#checkCarreras input:checked')]
+  // Recolectar materias seleccionadas
+  const materiasSeleccionadas = [...document.querySelectorAll('[class^="mat-check-"]:checked')]
     .map(el => parseInt(el.value));
 
   if (!apellido || !nombre || !dni) return setStatus(status, 'Completá apellido, nombre y DNI.', 'warn');
   if (!validarDNI(dni))             return setStatus(status, 'El DNI debe tener 7 u 8 dígitos numéricos.', 'warn');
   if (email && !validarEmail(email)) return setStatus(status, 'El correo no tiene un formato válido.', 'warn');
-  if (!carrerasSeleccionadas.length) return setStatus(status, 'Seleccioná al menos un profesorado.', 'warn');
+  if (!materiasSeleccionadas.length) return setStatus(status, 'Seleccioná al menos una materia.', 'warn');
 
   setLoading(btn, true, 'Creando cuenta...');
   try {
     const res  = await fetch(API + '/docente/registro', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apellido, nombre, dni, email: email || null, carreras: carrerasSeleccionadas }),
+      body: JSON.stringify({ apellido, nombre, dni, email: email || null, materias: materiasSeleccionadas }),
       signal: AbortSignal.timeout(8000)
     });
     const data = await res.json();
     if (data.ok) {
-      sessionStorage.setItem('docente_auth', '1');
-      sessionStorage.setItem('docente_data', JSON.stringify(data.docente));
+      localStorage.setItem('docente_auth', '1');
+      localStorage.setItem('docente_data', JSON.stringify(data.docente));
       mostrarMenu(data.docente);
     } else {
       setStatus(status, data.error || 'No se pudo crear la cuenta.', 'error');
@@ -327,8 +460,8 @@ async function cargarResumen(idDocente) {
 }
 
 function cerrarSesion() {
-  sessionStorage.removeItem('docente_auth');
-  sessionStorage.removeItem('docente_data');
+  localStorage.removeItem('docente_auth');
+  localStorage.removeItem('docente_data');
   window.location.reload();
 }
 </script>

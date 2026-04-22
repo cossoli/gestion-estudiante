@@ -328,16 +328,32 @@ async function cargarDocentesSelect() {
 async function cargarMateriasPorCarrera() {
   const idCarrera = document.getElementById('mesaCarrera').value;
   const sel = document.getElementById('mesaMateria');
-  if (!idCarrera) { sel.innerHTML = '<option value="">Primero seleccioná la carrera</option>'; return; }
+  if (!idCarrera) {
+    sel.innerHTML = '<option value="">Primero seleccioná la carrera</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">Cargando...</option>';
   try {
     const res  = await fetch(API + '/materias?id_carrera=' + idCarrera, { signal: AbortSignal.timeout(6000) });
     const data = await res.json();
     sel.innerHTML = '<option value="">Seleccioná una materia</option>';
+    // Agrupar por año
+    const porAnio = {};
     data.forEach(m => {
-      const o = document.createElement('option');
-      o.value = m.id_materia;
-      o.textContent = m.nombre_materia;
-      sel.appendChild(o);
+      if (!porAnio[m.anio_plan]) porAnio[m.anio_plan] = [];
+      porAnio[m.anio_plan].push(m);
+    });
+    Object.entries(porAnio).forEach(([anio, materias]) => {
+      const group = document.createElement('optgroup');
+      group.label = anio + '° año';
+      materias.forEach(m => {
+        const o = document.createElement('option');
+        o.value = String(m.id_materia);
+        const cuatrim = m.formato === 'anual' ? 'Anual' : m.cuatrimestre + '° cuatrim.';
+        o.textContent = m.nombre_materia + ' (' + cuatrim + ')';
+        group.appendChild(o);
+      });
+      sel.appendChild(group);
     });
   } catch {
     sel.innerHTML = '<option value="">Error al cargar</option>';
@@ -388,7 +404,7 @@ function cerrarModalMesa() {
 
 async function guardarMesa() {
   const status     = document.getElementById('modalMesaStatus');
-  const idMateria  = parseInt(document.getElementById('mesaMateria').value);
+  const idMateria  = parseInt(document.getElementById('mesaMateria').value) || 0;
   const turno      = document.getElementById('mesaTurno').value;
   const anio       = parseInt(document.getElementById('mesaAnio').value);
   const fecha      = document.getElementById('mesaFecha').value;
@@ -397,7 +413,7 @@ async function guardarMesa() {
   const activa     = document.getElementById('mesaActiva').value === '1';
 
   clearStatus(status);
-  if (!idMateria) return setStatus(status, 'Seleccioná una materia.', 'warn');
+  if (!idMateria || idMateria === 0) return setStatus(status, 'Seleccioná una materia.', 'warn');
   if (!turno)     return setStatus(status, 'Seleccioná el turno.', 'warn');
   if (!anio)      return setStatus(status, 'Ingresá el año.', 'warn');
 

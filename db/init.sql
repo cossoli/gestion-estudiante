@@ -436,3 +436,17 @@ INSERT INTO materias (id_carrera, nombre_materia, codigo_materia, anio_plan, for
 -- 4° Año — Formación Práctica Profesional
 (4, 'Taller de Práctica Docente IV y Residencia Pedagógica', 'TEA-410', 4, 'anual', NULL);
 
+
+
+-- ── ESTUDIANTE - CARRERAS ─────────────────────────────────────────
+-- Permite que un alumno esté inscripto en más de un profesorado.
+-- anio_actual y anio_cohorte se guardan por carrera.
+CREATE TABLE estudiante_carreras (
+    id_estudiante INT NOT NULL,
+    id_carrera INT NOT NULL,
+    anio_actual INT NOT NULL DEFAULT 1 CHECK (anio_actual >= 1),
+    anio_cohorte INT,
+    PRIMARY KEY (id_estudiante, id_carrera),
+    CONSTRAINT fk_ec_estudiante FOREIGN KEY (id_estudiante) REFERENCES estudiantes(id_estudiante) ON DELETE CASCADE,
+    CONSTRAINT fk_ec_carrera    FOREIGN KEY (id_carrera)    REFERENCES carreras(id_carrera)
+);

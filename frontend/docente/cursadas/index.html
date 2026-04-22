@@ -103,10 +103,10 @@
 let docenteData = null;
 let datosCargados = {}; // { id_materia: [alumnos] }
 
-if (!sessionStorage.getItem('docente_auth')) {
+if (!localStorage.getItem('docente_auth')) {
   document.getElementById('sinSesion').style.display    = 'block';
 } else {
-  docenteData = JSON.parse(sessionStorage.getItem('docente_data') || '{}');
+  docenteData = JSON.parse(localStorage.getItem('docente_data') || '{}');
   document.getElementById('panelContent').style.display = 'block';
   document.getElementById('subtituloHeader').textContent =
     `Prof. ${docenteData.apellido}, ${docenteData.nombre} — Cursadas`;

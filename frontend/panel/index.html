@@ -441,43 +441,51 @@ function cambiarSeccion(seccion) {
 
 async function cargarMesas() {
   const cont = document.getElementById('mesasContenido');
-  cont.innerHTML = '<div class="text-sm text-muted" style="padding:12px">Cargando mesas...</div>';
+  cont.innerHTML = '<div class="text-sm text-muted" style="padding:12px">Cargando...</div>';
   try {
-    const res  = await fetch(API + '/alumno/mesas?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(8000) });
-    const data = await res.json();
-    const mesas = data.mesas || [];
+    const [r1, r2] = await Promise.all([
+      fetch(API + '/alumno/mesas?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(8000) }),
+      fetch(API + '/alumno/resultados-finales?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(8000) })
+    ]);
+    const dataMesas = await r1.json();
+    const dataRes   = await r2.json();
+    const mesas     = dataMesas.mesas      || [];
+    const resultados = dataRes.resultados  || [];
 
-    // Badge
+    // Badge — mesas abiertas sin inscribir
+    const sinInscribir = mesas.filter(m => !m.inscripto).length;
     const badge = document.getElementById('badgeFinales');
-    if (mesas.length > 0) { badge.textContent = mesas.length; badge.style.display = 'inline'; }
+    if (sinInscribir > 0) { badge.textContent = sinInscribir; badge.style.display = 'inline'; }
     else badge.style.display = 'none';
-
-    if (!mesas.length) {
-      cont.innerHTML = `
-        <div class="empty-state" style="padding:40px">
-          <div class="empty-state-icon">📝</div>
-          <p>No hay mesas de examen abiertas para tus materias en este momento.</p>
-        </div>`;
-      return;
-    }
 
     const turnoLabel = { feb_mar: 'Feb - Mar', julio: 'Julio', nov_dic: 'Nov - Dic' };
 
-    cont.innerHTML = `<div class="grid" style="gap:12px">` +
-      mesas.map(m => `
-        <div class="card" style="margin:0;padding:16px 20px">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    let html = '';
+
+    // ── Sección: Mesas abiertas ──
+    html += `<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:10px">
+      Mesas abiertas para inscripción
+    </div>`;
+
+    if (!mesas.length) {
+      html += `<div class="empty-state" style="padding:24px">
+        <div class="empty-state-icon">📝</div>
+        <p class="text-sm">No hay mesas abiertas para tus materias en este momento.</p>
+      </div>`;
+    } else {
+      html += `<div class="grid" style="gap:10px;margin-bottom:24px">` +
+        mesas.map(m => `
+          <div style="background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 18px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
             <div>
-              <div style="font-weight:700;font-size:15px">${esc(m.nombre_materia)}</div>
+              <div style="font-weight:700;font-size:14px">${esc(m.nombre_materia)}</div>
               <div class="text-sm text-muted" style="margin-top:3px">
-                ${esc(m.nombre_carrera)} ·
-                ${turnoLabel[m.turno] || m.turno} ${esc(String(m.anio))}
+                ${esc(m.nombre_carrera)} · ${turnoLabel[m.turno] || m.turno} ${esc(String(m.anio))}
                 ${m.fecha_mesa ? ' · ' + new Date(m.fecha_mesa).toLocaleDateString('es-AR') : ''}
                 ${m.aula ? ' · 📍 ' + esc(m.aula) : ''}
               </div>
               ${m.docente_nombre ? `<div class="text-sm text-muted">👤 ${esc(m.docente_nombre)}</div>` : ''}
             </div>
-            <div style="text-align:right;flex-shrink:0">
+            <div style="flex-shrink:0">
               ${m.inscripto
                 ? '<span class="pill pill-aprobado">✓ Inscripto</span>'
                 : `<button class="btn btn-primary" style="padding:7px 16px;font-size:13px"
@@ -486,11 +494,55 @@ async function cargarMesas() {
                    </button>`}
             </div>
           </div>
-        </div>
-      `).join('') +
-    `</div>`;
+        `).join('') +
+      `</div>`;
+    }
+
+    // ── Sección: Mis resultados ──
+    html += `<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:10px;padding-top:8px;border-top:1px solid var(--border)">
+      Mis resultados de exámenes finales
+    </div>`;
+
+    if (!resultados.length) {
+      html += `<div class="empty-state" style="padding:24px">
+        <div class="empty-state-icon">🎓</div>
+        <p class="text-sm">Todavía no tenés resultados de exámenes finales cargados.</p>
+      </div>`;
+    } else {
+      const resPill = {
+        aprobado:  '<span class="pill pill-aprobado">Aprobado</span>',
+        reprobado: '<span class="pill pill-rechazado">Reprobado</span>',
+        ausente:   '<span class="pill pill-pendiente">Ausente</span>',
+      };
+      html += `<div class="table-wrap"><table>
+        <thead>
+          <tr>
+            <th>Materia</th>
+            <th>Carrera</th>
+            <th>Turno</th>
+            <th>Fecha</th>
+            <th>Nota</th>
+            <th>Resultado</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${resultados.map(r => `
+            <tr>
+              <td><strong>${esc(r.nombre_materia)}</strong></td>
+              <td class="text-sm text-muted">${esc(r.nombre_carrera)}</td>
+              <td class="text-sm">${turnoLabel[r.turno] || r.turno} ${esc(String(r.anio))}</td>
+              <td class="text-sm">${r.fecha_mesa ? new Date(r.fecha_mesa).toLocaleDateString('es-AR') : '—'}</td>
+              <td><strong style="font-size:16px">${r.nota_obtenida != null ? r.nota_obtenida : '—'}</strong></td>
+              <td>${resPill[r.resultado] || '<span class="pill pill-pendiente">Sin resultado</span>'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table></div>`;
+    }
+
+    cont.innerHTML = html;
   } catch {
-    cont.innerHTML = '<div class="alert alert-error"><span>✕</span><span>Error al cargar mesas.</span></div>';
+    cont.innerHTML = '<div class="alert alert-error"><span>✕</span><span>Error al cargar.</span></div>';
   }
 }
 

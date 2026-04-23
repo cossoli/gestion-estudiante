@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cursadas — Docente IFDC</title>
+  <title>Materias asignadas — Docente IFDC</title>
   <link rel="stylesheet" href="/styles.css">
   <style>
     .carrera-titulo {
@@ -35,7 +35,7 @@
       <div class="header-logo">I</div>
       <div>
         <div class="header-title">IFDC Río Colorado</div>
-        <div class="header-subtitle" id="subtituloHeader">Docente — Cursadas</div>
+        <div class="header-subtitle" id="subtituloHeader">Docente — Materias asignadas</div>
       </div>
     </div>
     <nav class="header-nav">
@@ -55,8 +55,8 @@
   <div id="panelContent" style="display:none">
     <div class="page-hero" style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
       <div>
-        <h1>Cursadas</h1>
-        <p id="periodoActual" class="text-muted"></p>
+        <h1>Materias asignadas</h1>
+        <p id="periodoActual" class="text-muted">Alumnos inscriptos en tus materias del año lectivo actual.</p>
       </div>
       <!-- Selector de período -->
       <div class="actions" style="align-items:flex-end;gap:8px">
@@ -216,8 +216,8 @@ function renderMateria(m) {
               <tr>
                 <th>Alumno</th>
                 <th>DNI</th>
-                <th>Resultado actual</th>
-                <th>Nuevo resultado</th>
+                <th>Estado</th>
+                <th>Resultado cursada</th>
                 <th>Acción</th>
               </tr>
             </thead>
@@ -256,7 +256,7 @@ function renderMateria(m) {
   `;
 }
 
-async function guardarResultado(idCursada, nombre) {
+async function guardarResultado_DEPRECADO(idCursada, nombre) {
   const sel       = document.getElementById('sel-' + idCursada);
   const resultado = sel?.value;
   if (!resultado) return;

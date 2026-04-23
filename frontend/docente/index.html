@@ -173,9 +173,60 @@
         </div>
       </a>
     </div>
+
+    <!-- ABM de materias -->
+    <div class="card" id="cardAbm" style="margin-top:20px;display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <h3 class="card-title" style="margin:0">Mis materias asignadas</h3>
+        <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="abrirAgregarMateria()">
+          + Agregar materia
+        </button>
+      </div>
+      <div id="abmContenido"></div>
+    </div>
+
   </div>
 
 </main>
+
+<!-- Modal: agregar materia -->
+<div class="modal-overlay hidden" id="modalAgregarMateria">
+  <div class="modal" style="max-width:560px">
+    <h3 class="modal-title">Agregar materia</h3>
+    <p class="text-sm text-muted" style="margin-bottom:16px">Seleccioná el profesorado y la materia que querés agregar.</p>
+    <div class="grid" style="gap:14px">
+      <div class="field">
+        <label class="field-label">Profesorado</label>
+        <select id="abmCarrera" onchange="cargarMateriasAbm()">
+          <option value="">Seleccioná un profesorado</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Materia</label>
+        <select id="abmMateria">
+          <option value="">Primero seleccioná el profesorado</option>
+        </select>
+      </div>
+    </div>
+    <div id="abmStatus" class="alert" style="display:none;margin-top:12px"></div>
+    <div class="modal-footer" style="margin-top:16px">
+      <button class="btn btn-secondary" onclick="cerrarAgregarMateria()">Cancelar</button>
+      <button class="btn btn-primary" id="btnAgregarMateria" onclick="agregarMateria()">Agregar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmación -->
+<div class="modal-overlay hidden" id="modalConfirm">
+  <div class="modal">
+    <h3 class="modal-title" id="modalConfirmTitle">¿Confirmar?</h3>
+    <p class="modal-body text-sm text-muted" id="modalConfirmMsg"></p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modalConfirmCancel">Cancelar</button>
+      <button class="btn btn-primary" id="modalConfirmOk">Confirmar</button>
+    </div>
+  </div>
+</div>
 
 <script src="/app.js"></script>
 <script>
@@ -405,6 +456,7 @@ async function mostrarMenu(docente) {
     <a class="btn btn-secondary" href="/inicio/">Menú</a>
   `;
   await cargarResumen(docente.id_docente);
+  await renderAbm(docente.id_docente);
 }
 
 async function cargarResumen(idDocente) {
@@ -457,6 +509,184 @@ async function cargarResumen(idDocente) {
       document.getElementById('materiasResumen').style.display = 'block';
     }
   } catch { /* silencioso */ }
+}
+
+// ── ABM de materias ──────────────────────────────────────────────
+async function renderAbm(idDocente) {
+  const card = document.getElementById('cardAbm');
+  const cont = document.getElementById('abmContenido');
+  card.style.display = 'block';
+  cont.innerHTML = '<div class="text-sm text-muted">Cargando...</div>';
+
+  try {
+    const res  = await fetch(API + '/docente/materias?id_docente=' + idDocente, { signal: AbortSignal.timeout(6000) });
+    const data = await res.json();
+    const materias = data.materias || [];
+
+    if (!materias.length) {
+      cont.innerHTML = '<div class="empty-state" style="padding:24px"><div class="empty-state-icon">📚</div><p>No tenés materias asignadas todavía.</p></div>';
+      return;
+    }
+
+    // Agrupar por carrera
+    const porCarrera = {};
+    materias.forEach(m => {
+      if (!porCarrera[m.nombre_carrera]) porCarrera[m.nombre_carrera] = [];
+      porCarrera[m.nombre_carrera].push(m);
+    });
+
+    cont.innerHTML = Object.entries(porCarrera).map(([carrera, mats]) => `
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)">
+          📚 ${esc(carrera)}
+        </div>
+        <div class="grid" style="gap:8px">
+          ${mats.map(m => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);gap:12px">
+              <div>
+                <div style="font-weight:600;font-size:14px">${esc(m.nombre_materia)}</div>
+                <div class="text-sm text-muted">
+                  ${esc(m.codigo_materia || '')} · ${m.formato === 'anual' ? 'Anual' : m.cuatrimestre + '° cuatrim.'} · ${m.anio_plan}° año
+                </div>
+              </div>
+              <button class="btn btn-bad" style="padding:5px 12px;font-size:12px;flex-shrink:0"
+                onclick="bajaMateria(${m.id_materia}, '${esc(m.nombre_materia)}')">
+                Dar de baja
+              </button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+  } catch {
+    cont.innerHTML = '<div class="alert alert-error"><span>✕</span><span>Error al cargar materias.</span></div>';
+  }
+}
+
+async function bajaMateria(idMateria, nombreMateria) {
+  const docente = JSON.parse(localStorage.getItem('docente_data') || '{}');
+  const ok = await confirmar({
+    titulo:  'Dar de baja materia',
+    mensaje: `¿Confirmás que querés darte de baja de "${nombreMateria}"?`,
+    btnOk:   'Sí, dar de baja',
+    tipo:    'warn'
+  });
+  if (!ok) return;
+
+  try {
+    const res  = await fetch(API + '/docente/materias/baja', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_docente: docente.id_docente, id_materia: idMateria }),
+      signal: AbortSignal.timeout(6000)
+    });
+    const data = await res.json();
+    if (data.ok) await renderAbm(docente.id_docente);
+    else alert(data.error || 'Error al dar de baja.');
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+
+async function abrirAgregarMateria() {
+  const overlay = document.getElementById('modalAgregarMateria');
+  const selCarrera = document.getElementById('abmCarrera');
+  clearStatus(document.getElementById('abmStatus'));
+  // Cargar carreras
+  try {
+    const res  = await fetch(API + '/carreras', { signal: AbortSignal.timeout(6000) });
+    const data = await res.json();
+    selCarrera.innerHTML = '<option value="">Seleccioná un profesorado</option>';
+    data.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.id_carrera; o.textContent = c.nombre_carrera;
+      selCarrera.appendChild(o);
+    });
+  } catch { /* silencioso */ }
+  overlay.classList.remove('hidden');
+}
+
+async function cargarMateriasAbm() {
+  const idCarrera = document.getElementById('abmCarrera').value;
+  const sel = document.getElementById('abmMateria');
+  const docente = JSON.parse(localStorage.getItem('docente_data') || '{}');
+  if (!idCarrera) { sel.innerHTML = '<option value="">Primero seleccioná el profesorado</option>'; return; }
+
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(API + '/materias?id_carrera=' + idCarrera, { signal: AbortSignal.timeout(6000) }),
+      fetch(API + '/docente/materias?id_docente=' + docente.id_docente, { signal: AbortSignal.timeout(6000) })
+    ]);
+    const todasMaterias  = await r1.json();
+    const misM = await r2.json();
+    const misIds = new Set((misM.materias || []).map(m => m.id_materia));
+
+    // Mostrar solo las que NO tiene asignadas
+    const disponibles = todasMaterias.filter(m => !misIds.has(m.id_materia));
+
+    sel.innerHTML = '<option value="">Seleccioná una materia</option>';
+    if (!disponibles.length) {
+      sel.innerHTML = '<option value="">Ya tenés todas las materias de este profesorado</option>';
+      return;
+    }
+
+    // Agrupar por año
+    const porAnio = {};
+    disponibles.forEach(m => {
+      if (!porAnio[m.anio_plan]) porAnio[m.anio_plan] = [];
+      porAnio[m.anio_plan].push(m);
+    });
+
+    Object.entries(porAnio).forEach(([anio, mats]) => {
+      const group = document.createElement('optgroup');
+      group.label = anio + '° año';
+      mats.forEach(m => {
+        const o = document.createElement('option');
+        o.value = String(m.id_materia);
+        o.textContent = m.nombre_materia + ' (' + (m.formato === 'anual' ? 'Anual' : m.cuatrimestre + '° cuatrim.') + ')';
+        group.appendChild(o);
+      });
+      sel.appendChild(group);
+    });
+  } catch { /* silencioso */ }
+}
+
+async function agregarMateria() {
+  const idMateria = parseInt(document.getElementById('abmMateria').value) || 0;
+  const status    = document.getElementById('abmStatus');
+  const docente   = JSON.parse(localStorage.getItem('docente_data') || '{}');
+  clearStatus(status);
+
+  if (!idMateria) return setStatus(status, 'Seleccioná una materia.', 'warn');
+
+  const btn = document.getElementById('btnAgregarMateria');
+  setLoading(btn, true, 'Agregando...');
+  try {
+    const res  = await fetch(API + '/docente/materias/alta', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_docente: docente.id_docente, id_materia: idMateria }),
+      signal: AbortSignal.timeout(6000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      cerrarAgregarMateria();
+      await renderAbm(docente.id_docente);
+      await cargarResumen(docente.id_docente);
+    } else {
+      setStatus(status, data.error || 'Error al agregar.', 'error');
+    }
+  } catch {
+    setStatus(status, 'No se pudo conectar.', 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+function cerrarAgregarMateria() {
+  document.getElementById('modalAgregarMateria').classList.add('hidden');
+  document.getElementById('abmMateria').innerHTML = '<option value="">Primero seleccioná el profesorado</option>';
+  document.getElementById('abmCarrera').value = '';
 }
 
 function cerrarSesion() {

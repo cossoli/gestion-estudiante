@@ -970,13 +970,28 @@ try {
         $ins = $insc->fetch();
         if (!$ins) respond(['ok' => false, 'error' => 'Inscripción no encontrada.'], 404);
 
-        // Insertar o actualizar en cursadas
-        $pdo->prepare(
-            "INSERT INTO cursadas (id_estudiante, id_materia, anio_cursada, resultado, fecha_resultado)
-             VALUES (?, ?, ?, ?, CURRENT_DATE)
-             ON CONFLICT (id_estudiante, id_materia, anio_cursada, cuatrimestre_cursada)
-             DO UPDATE SET resultado = EXCLUDED.resultado, fecha_resultado = CURRENT_DATE"
-        )->execute([$ins['id_estudiante'], $ins['id_materia'], $ins['anio_lectivo'], $resultado]);
+        // Verificar si ya existe un registro en cursadas
+        $existeStmt = $pdo->prepare(
+            "SELECT id_cursada FROM cursadas
+             WHERE id_estudiante = ? AND id_materia = ? AND anio_cursada = ?
+               AND cuatrimestre_cursada IS NULL"
+        );
+        $existeStmt->execute([$ins['id_estudiante'], $ins['id_materia'], $ins['anio_lectivo']]);
+        $existe = $existeStmt->fetch();
+
+        if ($existe) {
+            // Actualizar registro existente
+            $pdo->prepare(
+                "UPDATE cursadas SET resultado = ?, fecha_resultado = CURRENT_DATE
+                 WHERE id_cursada = ?"
+            )->execute([$resultado, $existe['id_cursada']]);
+        } else {
+            // Insertar nuevo registro
+            $pdo->prepare(
+                "INSERT INTO cursadas (id_estudiante, id_materia, anio_cursada, cuatrimestre_cursada, resultado, fecha_resultado)
+                 VALUES (?, ?, ?, NULL, ?, CURRENT_DATE)"
+            )->execute([$ins['id_estudiante'], $ins['id_materia'], $ins['anio_lectivo'], $resultado]);
+        }
 
         respond(['ok' => true]);
     }

@@ -281,15 +281,24 @@ function renderTabla(datos) {
             </button>
           </div>`;
 
+        const resultadoPill = {
+          aprobado:    '<span class="pill pill-aprobado">Aprobado</span>',
+          desaprobado: '<span class="pill pill-rechazado">Desaprobado</span>',
+          promocion:   '<span class="pill" style="background:#e8f5ff;color:#1a6fa8">Promoción</span>',
+          ausente:     '<span class="pill pill-pendiente">Ausente</span>',
+          abandono:    '<span class="pill pill-rechazado">Abandono</span>',
+        }[m.resultado_cursada] || '<span class="text-muted text-sm">Sin resultado</span>';
+
         rows.push(`
           <tr class="materia-row">
             <td></td>
-            <td colspan="3" style="padding-left:32px">
+            <td style="padding-left:32px">
               <strong>${esc(m.nombre_materia)}</strong>
-              <div class="text-sm text-muted">${esc(m.codigo_materia||'')} — ${esc(m.formato)}</div>
+              <div class="text-sm text-muted">${esc(m.codigo_materia||'')} — ${esc(m.formato)} — ${esc(m.carrera_materia||'')}</div>
             </td>
             <td>${corrHtml}</td>
             <td>${pillEstado}</td>
+            <td>${resultadoPill}</td>
             <td>${acciones}</td>
           </tr>
         `);

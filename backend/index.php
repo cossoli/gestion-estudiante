@@ -578,6 +578,7 @@ try {
     // Devuelve todos los alumnos activos con sus inscripciones a materias
     // y el estado de cada correlativa requerida.
     if ($path === '/secretaria/cursadas' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        // Traer todos los alumnos activos con sus carreras
         $stmt = $pdo->query(
             "SELECT e.id_estudiante, e.apellido, e.nombre, e.dni, e.correo, e.anio_actual,
                     c.nombre_carrera
@@ -589,23 +590,30 @@ try {
         $alumnos = $stmt->fetchAll();
 
         foreach ($alumnos as &$alumno) {
-            // Inscripciones a materias del año lectivo actual
+            // Inscripciones a materias del año lectivo actual con resultado del docente
             $mStmt = $pdo->prepare(
                 "SELECT im.id_inscripcion_materia, im.estado_secretaria AS estado_condicion,
-                        im.observaciones, m.id_materia, m.nombre_materia, m.codigo_materia, m.formato
+                        im.observaciones, m.id_materia, m.nombre_materia, m.codigo_materia,
+                        m.formato, m.cuatrimestre, m.anio_plan,
+                        c2.nombre_carrera AS carrera_materia,
+                        cu.resultado AS resultado_cursada,
+                        cu.fecha_resultado
                  FROM inscripciones_materias im
                  JOIN materias m ON m.id_materia = im.id_materia
+                 JOIN carreras c2 ON c2.id_carrera = m.id_carrera
+                 LEFT JOIN cursadas cu ON cu.id_estudiante = im.id_estudiante
+                   AND cu.id_materia = im.id_materia
+                   AND cu.anio_cursada = im.anio_lectivo
                  WHERE im.id_estudiante = ? AND im.anio_lectivo = ?
-                 ORDER BY m.anio_plan, m.nombre_materia"
+                 ORDER BY c2.nombre_carrera, m.anio_plan, m.nombre_materia"
             );
             $mStmt->execute([$alumno['id_estudiante'], (int) date('Y')]);
             $materias = $mStmt->fetchAll();
 
             foreach ($materias as &$materia) {
-                // Correlativas requeridas para esta materia
+                // Correlativas
                 $cStmt = $pdo->prepare(
                     "SELECT cor.tipo, m2.nombre_materia,
-                            -- Verificar si el alumno aprobó/cursó la materia requerida
                             EXISTS (
                                 SELECT 1 FROM cursadas cu
                                 WHERE cu.id_estudiante = ?
@@ -627,11 +635,8 @@ try {
                 $materia['correlativas_fail'] = [];
                 foreach ($correlativas as $cor) {
                     $label = $cor['nombre_materia'] . ($cor['tipo'] === 'cursada' ? ' (cursada)' : ' (aprobada)');
-                    if ($cor['cumple']) {
-                        $materia['correlativas_ok'][] = $label;
-                    } else {
-                        $materia['correlativas_fail'][] = $label;
-                    }
+                    if ($cor['cumple']) $materia['correlativas_ok'][] = $label;
+                    else               $materia['correlativas_fail'][] = $label;
                 }
             }
             unset($materia);

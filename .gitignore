@@ -1,0 +1,22 @@
+# ── Variables de entorno (nunca subir al repositorio) ────────────
+.env
+
+# ── Uploads del backend ───────────────────────────────────────────
+backend/uploads/
+
+# ── Datos de PostgreSQL ───────────────────────────────────────────
+pgdata/
+
+# ── Sistema operativo ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editores ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Logs ──────────────────────────────────────────────────────────
+*.log

@@ -3,9 +3,9 @@ services:
     image: postgres:16
     container_name: ifdc_db
     environment:
-      POSTGRES_DB: ifdc
-      POSTGRES_USER: ifdc_user
-      POSTGRES_PASSWORD: ifdc_pass
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -14,7 +14,7 @@ services:
     networks:
       - ifdc_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ifdc_user -d ifdc"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -23,12 +23,12 @@ services:
     build: ./backend
     container_name: ifdc_backend
     environment:
-      DB_HOST: db
-      DB_NAME: ifdc
-      DB_USER: ifdc_user
-      DB_PASS: ifdc_pass
-      SECRETARIA_PASSWORD: Secre12456
-      TIC_PASSWORD: Tic12456
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+      SECRETARIA_PASSWORD: ${SECRETARIA_PASSWORD}
+      TIC_PASSWORD: ${TIC_PASSWORD}
     ports:
       - "8080:80"
     depends_on:

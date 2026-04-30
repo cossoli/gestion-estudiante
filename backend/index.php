@@ -29,30 +29,16 @@ function get_path(): string {
 }
 
 function assign_initial_subjects(PDO $pdo, int $studentId): void {
-    // Verificar año actual del estudiante
-    $studentStmt = $pdo->prepare("SELECT anio_actual FROM estudiantes WHERE id_estudiante = ?");
+    $studentStmt = $pdo->prepare("SELECT id_carrera, anio_actual FROM estudiantes WHERE id_estudiante = ?");
     $studentStmt->execute([$studentId]);
     $student = $studentStmt->fetch();
     if (!$student) return;
 
-    // Solo ingresantes de 1° año reciben inscripción automática
+    // Solo se inscriben automáticamente las materias del 1° cuatrimestre del 1° año.
+    // Alumnos de años superiores deben solicitar inscripción a Secretaría.
     if ((int) $student['anio_actual'] !== 1) return;
 
     $anioLectivo = (int) date('Y');
-
-    // Obtener TODAS las carreras del estudiante desde estudiante_carreras
-    $carreraStmt = $pdo->prepare("SELECT id_carrera FROM estudiante_carreras WHERE id_estudiante = ?");
-    $carreraStmt->execute([$studentId]);
-    $carreras = $carreraStmt->fetchAll();
-
-    // Si no tiene registros en estudiante_carreras, usar la carrera principal
-    if (empty($carreras)) {
-        $stmt = $pdo->prepare("SELECT id_carrera FROM estudiantes WHERE id_estudiante = ?");
-        $stmt->execute([$studentId]);
-        $row = $stmt->fetch();
-        if ($row) $carreras = [['id_carrera' => $row['id_carrera']]];
-    }
-
     $subjectStmt = $pdo->prepare(
         "SELECT id_materia
          FROM materias
@@ -62,6 +48,8 @@ function assign_initial_subjects(PDO $pdo, int $studentId): void {
            AND formato = 'cuatrimestral'
            AND cuatrimestre = 1"
     );
+    $subjectStmt->execute([$student['id_carrera']]);
+    $subjects = $subjectStmt->fetchAll();
 
     $insert = $pdo->prepare(
         "INSERT INTO inscripciones_materias
@@ -69,14 +57,8 @@ function assign_initial_subjects(PDO $pdo, int $studentId): void {
          VALUES (?, ?, ?, 'automatica', 'habilitado', TRUE, 'Alta inicial — 1° cuatrimestre 1° año')
          ON CONFLICT (id_estudiante, id_materia, anio_lectivo) DO NOTHING"
     );
-
-    // Inscribir materias de CADA carrera
-    foreach ($carreras as $carrera) {
-        $subjectStmt->execute([$carrera['id_carrera']]);
-        $subjects = $subjectStmt->fetchAll();
-        foreach ($subjects as $subject) {
-            $insert->execute([$studentId, $subject['id_materia'], $anioLectivo]);
-        }
+    foreach ($subjects as $subject) {
+        $insert->execute([$studentId, $subject['id_materia'], $anioLectivo]);
     }
 }
 
@@ -143,7 +125,7 @@ try {
             respond(['ok' => true, 'inscripto' => false]);
         }
 
-        // Traer carreras del alumno desde estudiante_carreras
+        // Traer carreras del alumno
         $cStmt = $pdo->prepare(
             "SELECT ec.id_carrera, ec.anio_actual, ec.anio_cohorte, c.nombre_carrera
              FROM estudiante_carreras ec
@@ -152,16 +134,6 @@ try {
         );
         $cStmt->execute([$student['id_estudiante']]);
         $carreras = $cStmt->fetchAll();
-
-        // Fallback: si no tiene registros en estudiante_carreras, usar carrera principal
-        if (empty($carreras)) {
-            $carreras = [[
-                'id_carrera'     => $student['id_carrera'],
-                'nombre_carrera' => $student['nombre_carrera'],
-                'anio_actual'    => $student['anio_actual'],
-                'anio_cohorte'   => $student['anio_cohorte'],
-            ]];
-        }
 
         respond(['ok' => true, 'inscripto' => true, 'data' => $student, 'carreras' => $carreras]);
     }
@@ -341,43 +313,17 @@ try {
 
     // ── Secretaría: listado ────────────────────────────────────────────────────
     if ($path === '/secretaria/inscriptos' && $_SERVER['REQUEST_METHOD'] === 'GET') {
-        // Traer todas las carreras del alumno — una fila por cada carrera inscripta
         $stmt = $pdo->query(
-            "SELECT e.id_estudiante, e.apellido, e.nombre, e.dni, e.correo, e.estado_general,
-                    ec.anio_actual, ec.id_carrera,
-                    c.nombre_carrera,
-                    r.estado_secretaria, r.observaciones_secretaria,
+            "SELECT e.id_estudiante, e.apellido, e.nombre, e.dni, e.correo, e.anio_actual, e.estado_general,
+                    c.nombre_carrera, r.estado_secretaria, r.observaciones_secretaria,
                     d.pdf_dni, d.pdf_titulo_secundario
              FROM estudiantes e
-             -- Usar estudiante_carreras para todas las carreras; fallback a carrera principal
-             LEFT JOIN estudiante_carreras ec ON ec.id_estudiante = e.id_estudiante
-             JOIN carreras c ON c.id_carrera = COALESCE(ec.id_carrera, e.id_carrera)
+             JOIN carreras c ON c.id_carrera = e.id_carrera
              LEFT JOIN revision_secretaria r ON r.id_estudiante = e.id_estudiante
              LEFT JOIN documentos_estudiante d ON d.id_estudiante = e.id_estudiante
-             ORDER BY e.fecha_registro DESC, c.nombre_carrera"
+             ORDER BY e.fecha_registro DESC"
         );
-        $rows = $stmt->fetchAll();
-
-        // Agrupar por estudiante mostrando todas sus carreras
-        $estudiantes = [];
-        foreach ($rows as $row) {
-            $id = $row['id_estudiante'];
-            if (!isset($estudiantes[$id])) {
-                $estudiantes[$id] = $row;
-                $estudiantes[$id]['carreras'] = [];
-            }
-            $estudiantes[$id]['carreras'][] = [
-                'id_carrera'    => $row['id_carrera'],
-                'nombre_carrera'=> $row['nombre_carrera'],
-                'anio_actual'   => $row['anio_actual'],
-            ];
-            // nombre_carrera del primer registro como referencia
-            $estudiantes[$id]['nombre_carrera'] = implode(' / ',
-                array_unique(array_column($estudiantes[$id]['carreras'], 'nombre_carrera'))
-            );
-        }
-
-        respond(array_values($estudiantes));
+        respond($stmt->fetchAll());
     }
 
     // ── Secretaría: acción ────────────────────────────────────────────────────
@@ -446,7 +392,35 @@ try {
              WHERE e.estado_general = 'aprobado_secretaria' OR e.estado_general = 'cargado_plataforma'
              ORDER BY e.apellido, e.nombre"
         );
-        respond($stmt->fetchAll());
+        $estudiantes = $stmt->fetchAll();
+
+        // Agregar carreras y materias a cada estudiante
+        foreach ($estudiantes as &$est) {
+            // Carreras
+            $cStmt = $pdo->prepare(
+                "SELECT ec.id_carrera, c.nombre_carrera
+                 FROM estudiante_carreras ec
+                 JOIN carreras c ON c.id_carrera = ec.id_carrera
+                 WHERE ec.id_estudiante = ?"
+            );
+            $cStmt->execute([$est['id_estudiante']]);
+            $carreras = $cStmt->fetchAll();
+            $est['carreras'] = !empty($carreras) ? $carreras : [['id_carrera' => $est['id_carrera'], 'nombre_carrera' => $est['nombre_carrera']]];
+
+            // Materias inscriptas del año lectivo actual
+            $mStmt = $pdo->prepare(
+                "SELECT m.nombre_materia, m.codigo_materia
+                 FROM inscripciones_materias im
+                 JOIN materias m ON m.id_materia = im.id_materia
+                 WHERE im.id_estudiante = ? AND im.anio_lectivo = ?
+                 ORDER BY m.nombre_materia"
+            );
+            $mStmt->execute([$est['id_estudiante'], (int) date('Y')]);
+            $est['materias'] = $mStmt->fetchAll();
+        }
+        unset($est);
+
+        respond($estudiantes);
     }
 
     // ── TIC: marcar cargado ───────────────────────────────────────────────────
@@ -578,7 +552,6 @@ try {
     // Devuelve todos los alumnos activos con sus inscripciones a materias
     // y el estado de cada correlativa requerida.
     if ($path === '/secretaria/cursadas' && $_SERVER['REQUEST_METHOD'] === 'GET') {
-        // Traer todos los alumnos activos con sus carreras
         $stmt = $pdo->query(
             "SELECT e.id_estudiante, e.apellido, e.nombre, e.dni, e.correo, e.anio_actual,
                     c.nombre_carrera
@@ -590,30 +563,23 @@ try {
         $alumnos = $stmt->fetchAll();
 
         foreach ($alumnos as &$alumno) {
-            // Inscripciones a materias del año lectivo actual con resultado del docente
+            // Inscripciones a materias del año lectivo actual
             $mStmt = $pdo->prepare(
                 "SELECT im.id_inscripcion_materia, im.estado_secretaria AS estado_condicion,
-                        im.observaciones, m.id_materia, m.nombre_materia, m.codigo_materia,
-                        m.formato, m.cuatrimestre, m.anio_plan,
-                        c2.nombre_carrera AS carrera_materia,
-                        cu.resultado AS resultado_cursada,
-                        cu.fecha_resultado
+                        im.observaciones, m.id_materia, m.nombre_materia, m.codigo_materia, m.formato
                  FROM inscripciones_materias im
                  JOIN materias m ON m.id_materia = im.id_materia
-                 JOIN carreras c2 ON c2.id_carrera = m.id_carrera
-                 LEFT JOIN cursadas cu ON cu.id_estudiante = im.id_estudiante
-                   AND cu.id_materia = im.id_materia
-                   AND cu.anio_cursada = im.anio_lectivo
                  WHERE im.id_estudiante = ? AND im.anio_lectivo = ?
-                 ORDER BY c2.nombre_carrera, m.anio_plan, m.nombre_materia"
+                 ORDER BY m.anio_plan, m.nombre_materia"
             );
             $mStmt->execute([$alumno['id_estudiante'], (int) date('Y')]);
             $materias = $mStmt->fetchAll();
 
             foreach ($materias as &$materia) {
-                // Correlativas
+                // Correlativas requeridas para esta materia
                 $cStmt = $pdo->prepare(
                     "SELECT cor.tipo, m2.nombre_materia,
+                            -- Verificar si el alumno aprobó/cursó la materia requerida
                             EXISTS (
                                 SELECT 1 FROM cursadas cu
                                 WHERE cu.id_estudiante = ?
@@ -635,8 +601,11 @@ try {
                 $materia['correlativas_fail'] = [];
                 foreach ($correlativas as $cor) {
                     $label = $cor['nombre_materia'] . ($cor['tipo'] === 'cursada' ? ' (cursada)' : ' (aprobada)');
-                    if ($cor['cumple']) $materia['correlativas_ok'][] = $label;
-                    else               $materia['correlativas_fail'][] = $label;
+                    if ($cor['cumple']) {
+                        $materia['correlativas_ok'][] = $label;
+                    } else {
+                        $materia['correlativas_fail'][] = $label;
+                    }
                 }
             }
             unset($materia);
@@ -928,70 +897,54 @@ try {
         respond(['ok' => true, 'materias' => $stmt->fetchAll()]);
     }
 
-    // ── Docente: alumnos inscriptos en una materia ───────────────────────────
+    // ── Docente: alumnos de una cursada ───────────────────────────────────────
     if ($path === '/docente/cursadas' && $_SERVER['REQUEST_METHOD'] === 'GET') {
-        $idMateria   = (int) ($_GET['id_materia'] ?? 0);
-        $anioLectivo = (int) ($_GET['anio_cursada'] ?? date('Y'));
+        $idMateria    = (int) ($_GET['id_materia'] ?? 0);
+        $anioCursada  = (int) ($_GET['anio_cursada'] ?? date('Y'));
+        $cuatrimestre = $_GET['cuatrimestre_cursada'] ?? '';
 
         if ($idMateria === 0) respond(['ok' => false, 'error' => 'Falta id_materia.'], 400);
 
-        $stmt = $pdo->prepare(
-            "SELECT im.id_inscripcion_materia, im.estado_secretaria, im.observaciones,
-                    im.habilitada,
-                    e.apellido, e.nombre, e.dni, e.correo,
-                    cu.resultado AS resultado_cursada
-             FROM inscripciones_materias im
-             JOIN estudiantes e ON e.id_estudiante = im.id_estudiante
-             LEFT JOIN cursadas cu ON cu.id_estudiante = im.id_estudiante
-                AND cu.id_materia = im.id_materia
-                AND cu.anio_cursada = im.anio_lectivo
-             WHERE im.id_materia = ? AND im.anio_lectivo = ?
-             ORDER BY e.apellido, e.nombre"
-        );
-        $stmt->execute([$idMateria, $anioLectivo]);
+        // Si es anual, cuatrimestre puede ser NULL
+        if ($cuatrimestre === 'anual' || $cuatrimestre === '') {
+            $stmt = $pdo->prepare(
+                "SELECT cu.id_cursada, cu.resultado, cu.obs_cursada,
+                        e.apellido, e.nombre, e.dni, e.correo
+                 FROM cursadas cu
+                 JOIN estudiantes e ON e.id_estudiante = cu.id_estudiante
+                 WHERE cu.id_materia = ? AND cu.anio_cursada = ?
+                   AND cu.cuatrimestre_cursada IS NULL
+                 ORDER BY e.apellido, e.nombre"
+            );
+            $stmt->execute([$idMateria, $anioCursada]);
+        } else {
+            $stmt = $pdo->prepare(
+                "SELECT cu.id_cursada, cu.resultado, cu.obs_cursada,
+                        e.apellido, e.nombre, e.dni, e.correo
+                 FROM cursadas cu
+                 JOIN estudiantes e ON e.id_estudiante = cu.id_estudiante
+                 WHERE cu.id_materia = ? AND cu.anio_cursada = ?
+                   AND cu.cuatrimestre_cursada = ?
+                 ORDER BY e.apellido, e.nombre"
+            );
+            $stmt->execute([$idMateria, $anioCursada, (int) $cuatrimestre]);
+        }
         respond(['ok' => true, 'alumnos' => $stmt->fetchAll()]);
     }
 
     // ── Docente: guardar resultado de cursada ─────────────────────────────────
     if ($path === '/docente/cursadas/resultado' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $data      = json_input();
-        $idInscripcion = (int) ($data['id_inscripcion_materia'] ?? 0);
+        $idCursada = (int) ($data['id_cursada'] ?? 0);
         $resultado = trim($data['resultado'] ?? '');
 
-        if ($idInscripcion === 0 || !in_array($resultado, ['aprobado','desaprobado','promocion','ausente','abandono'], true)) {
+        if ($idCursada === 0 || !in_array($resultado, ['aprobado','desaprobado','promocion','ausente','abandono'], true)) {
             respond(['ok' => false, 'error' => 'Datos inválidos.'], 400);
         }
 
-        // Obtener datos de la inscripción
-        $insc = $pdo->prepare(
-            "SELECT id_estudiante, id_materia, anio_lectivo FROM inscripciones_materias WHERE id_inscripcion_materia = ?"
-        );
-        $insc->execute([$idInscripcion]);
-        $ins = $insc->fetch();
-        if (!$ins) respond(['ok' => false, 'error' => 'Inscripción no encontrada.'], 404);
-
-        // Verificar si ya existe un registro en cursadas
-        $existeStmt = $pdo->prepare(
-            "SELECT id_cursada FROM cursadas
-             WHERE id_estudiante = ? AND id_materia = ? AND anio_cursada = ?
-               AND cuatrimestre_cursada IS NULL"
-        );
-        $existeStmt->execute([$ins['id_estudiante'], $ins['id_materia'], $ins['anio_lectivo']]);
-        $existe = $existeStmt->fetch();
-
-        if ($existe) {
-            // Actualizar registro existente
-            $pdo->prepare(
-                "UPDATE cursadas SET resultado = ?, fecha_resultado = CURRENT_DATE
-                 WHERE id_cursada = ?"
-            )->execute([$resultado, $existe['id_cursada']]);
-        } else {
-            // Insertar nuevo registro
-            $pdo->prepare(
-                "INSERT INTO cursadas (id_estudiante, id_materia, anio_cursada, cuatrimestre_cursada, resultado, fecha_resultado)
-                 VALUES (?, ?, ?, NULL, ?, CURRENT_DATE)"
-            )->execute([$ins['id_estudiante'], $ins['id_materia'], $ins['anio_lectivo'], $resultado]);
-        }
+        $pdo->prepare(
+            "UPDATE cursadas SET resultado = ?, fecha_resultado = CURRENT_DATE WHERE id_cursada = ?"
+        )->execute([$resultado, $idCursada]);
 
         respond(['ok' => true]);
     }
@@ -1050,121 +1003,34 @@ try {
         respond(['ok' => true]);
     }
 
-    // ── Alumno: mesas disponibles para inscribirse ───────────────────────────
-    if ($path === '/alumno/mesas' && $_SERVER['REQUEST_METHOD'] === 'GET') {
-        $dni = trim($_GET['dni'] ?? '');
-        if ($dni === '') respond(['ok' => false, 'error' => 'Falta el DNI.'], 400);
-
-        $estStmt = $pdo->prepare("SELECT id_estudiante FROM estudiantes WHERE dni = ?");
-        $estStmt->execute([$dni]);
-        $est = $estStmt->fetch();
-        if (!$est) respond(['ok' => false, 'error' => 'Estudiante no encontrado.'], 404);
-
-        $stmt = $pdo->prepare(
-            "SELECT mf.id_mesa, mf.turno, mf.anio, mf.fecha_mesa, mf.aula,
-                    m.nombre_materia, c.nombre_carrera,
-                    COALESCE(d.apellido || ', ' || d.nombre, '') AS docente_nombre,
-                    EXISTS(
-                        SELECT 1 FROM inscripciones_mesas im2
-                        WHERE im2.id_mesa = mf.id_mesa AND im2.id_estudiante = ?
-                    ) AS inscripto
-             FROM mesas_finales mf
-             JOIN materias m ON m.id_materia = mf.id_materia
-             JOIN carreras c ON c.id_carrera = m.id_carrera
-             LEFT JOIN docentes d ON d.id_docente = mf.id_docente
-             WHERE mf.activa = TRUE
-               AND m.id_carrera IN (
-                   SELECT id_carrera FROM estudiante_carreras WHERE id_estudiante = ?
-                   UNION
-                   SELECT id_carrera FROM estudiantes WHERE id_estudiante = ?
-               )
-             ORDER BY mf.fecha_mesa ASC NULLS LAST, m.nombre_materia"
-        );
-        $stmt->execute([$est['id_estudiante'], $est['id_estudiante'], $est['id_estudiante']]);
-        respond(['ok' => true, 'mesas' => $stmt->fetchAll()]);
-    }
-
-    // ── Alumno: inscribirse a una mesa ────────────────────────────────────────
-    if ($path === '/alumno/inscribir-mesa' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        $data   = json_input();
-        $dni    = trim($data['dni'] ?? '');
-        $idMesa = (int) ($data['id_mesa'] ?? 0);
-
-        if ($dni === '' || $idMesa === 0) respond(['ok' => false, 'error' => 'Datos incompletos.'], 400);
-
-        $estStmt = $pdo->prepare("SELECT id_estudiante, estado_general FROM estudiantes WHERE dni = ?");
-        $estStmt->execute([$dni]);
-        $est = $estStmt->fetch();
-        if (!$est) respond(['ok' => false, 'error' => 'Estudiante no encontrado.'], 404);
-
-        if (!in_array($est['estado_general'], ['aprobado_secretaria','cargado_plataforma'])) {
-            respond(['ok' => false, 'error' => 'Tu inscripción todavía no fue aprobada por Secretaría.'], 403);
-        }
-
-        // Verificar que la mesa esté activa
-        $mesaStmt = $pdo->prepare("SELECT id_mesa FROM mesas_finales WHERE id_mesa = ? AND activa = TRUE");
-        $mesaStmt->execute([$idMesa]);
-        if (!$mesaStmt->fetch()) respond(['ok' => false, 'error' => 'La mesa no está disponible.'], 400);
-
-        $pdo->prepare(
-            "INSERT INTO inscripciones_mesas (id_estudiante, id_mesa)
-             VALUES (?, ?)
-             ON CONFLICT (id_estudiante, id_mesa) DO NOTHING"
-        )->execute([$est['id_estudiante'], $idMesa]);
-
-        respond(['ok' => true, 'message' => 'Inscripción registrada. Secretaría verificará tu condición.']);
-    }
-
-    // ── Alumno: resultados de exámenes finales ───────────────────────────────
-    if ($path === '/alumno/resultados-finales' && $_SERVER['REQUEST_METHOD'] === 'GET') {
-        $dni = trim($_GET['dni'] ?? '');
-        if ($dni === '') respond(['ok' => false, 'error' => 'Falta el DNI.'], 400);
-
-        $estStmt = $pdo->prepare("SELECT id_estudiante FROM estudiantes WHERE dni = ?");
-        $estStmt->execute([$dni]);
-        $est = $estStmt->fetch();
-        if (!$est) respond(['ok' => false, 'error' => 'Estudiante no encontrado.'], 404);
-
-        $stmt = $pdo->prepare(
-            "SELECT im.resultado, im.nota_obtenida, im.estado_condicion,
-                    mf.turno, mf.anio, mf.fecha_mesa,
+    // ── TIC: nuevas materias pendientes de carga ─────────────────────────────
+    if ($path === '/tic/nuevas-materias' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $stmt = $pdo->query(
+            "SELECT im.id_inscripcion_materia, im.tipo_inscripcion,
+                    e.id_estudiante, e.apellido, e.nombre, e.dni, e.correo,
                     m.nombre_materia, c.nombre_carrera
-             FROM inscripciones_mesas im
-             JOIN mesas_finales mf ON mf.id_mesa = im.id_mesa
-             JOIN materias m ON m.id_materia = mf.id_materia
+             FROM inscripciones_materias im
+             JOIN estudiantes e ON e.id_estudiante = im.id_estudiante
+             JOIN materias m ON m.id_materia = im.id_materia
              JOIN carreras c ON c.id_carrera = m.id_carrera
-             WHERE im.id_estudiante = ?
-               AND im.resultado IS NOT NULL
-             ORDER BY mf.fecha_mesa DESC NULLS LAST"
+             WHERE im.tipo_inscripcion = 'manual'
+               AND im.habilitada = TRUE
+               AND im.ingresado_plataforma = FALSE
+               AND e.estado_general IN ('aprobado_secretaria','cargado_plataforma')
+             ORDER BY e.apellido, e.nombre, m.nombre_materia"
         );
-        $stmt->execute([$est['id_estudiante']]);
-        respond(['ok' => true, 'resultados' => $stmt->fetchAll()]);
+        respond(['ok' => true, 'materias' => $stmt->fetchAll()]);
     }
 
-    // ── Docente: alta de materia ──────────────────────────────────────────────
-    if ($path === '/docente/materias/alta' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        $data      = json_input();
-        $idDocente = (int) ($data['id_docente'] ?? 0);
-        $idMateria = (int) ($data['id_materia'] ?? 0);
-        if ($idDocente === 0 || $idMateria === 0) respond(['ok' => false, 'error' => 'Datos inválidos.'], 400);
+    // ── TIC: marcar materia como cargada en plataforma ────────────────────────
+    if ($path === '/tic/cargar-materia' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data  = json_input();
+        $idInsc = (int) ($data['id_inscripcion_materia'] ?? 0);
+        if ($idInsc === 0) respond(['ok' => false, 'error' => 'Datos inválidos.'], 400);
 
         $pdo->prepare(
-            "INSERT INTO docente_materias (id_docente, id_materia) VALUES (?, ?) ON CONFLICT DO NOTHING"
-        )->execute([$idDocente, $idMateria]);
-
-        respond(['ok' => true]);
-    }
-
-    // ── Docente: baja de materia ───────────────────────────────────────────────
-    if ($path === '/docente/materias/baja' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        $data      = json_input();
-        $idDocente = (int) ($data['id_docente'] ?? 0);
-        $idMateria = (int) ($data['id_materia'] ?? 0);
-        if ($idDocente === 0 || $idMateria === 0) respond(['ok' => false, 'error' => 'Datos inválidos.'], 400);
-
-        $pdo->prepare(
-            "DELETE FROM docente_materias WHERE id_docente = ? AND id_materia = ?"
-        )->execute([$idDocente, $idMateria]);
+            "UPDATE inscripciones_materias SET ingresado_plataforma = TRUE WHERE id_inscripcion_materia = ?"
+        )->execute([$idInsc]);
 
         respond(['ok' => true]);
     }

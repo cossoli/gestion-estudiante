@@ -149,6 +149,7 @@ CREATE TABLE inscripciones_materias (
     estado_secretaria VARCHAR(20) NOT NULL DEFAULT 'pendiente'
         CHECK (estado_secretaria IN ('pendiente', 'habilitado', 'observado', 'rechazado')),
     habilitada BOOLEAN NOT NULL DEFAULT FALSE,
+    ingresado_plataforma BOOLEAN NOT NULL DEFAULT FALSE,
     fecha_inscripcion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     observaciones TEXT,
     CONSTRAINT fk_inscripcion_estudiante FOREIGN KEY (id_estudiante) REFERENCES estudiantes(id_estudiante) ON DELETE CASCADE,

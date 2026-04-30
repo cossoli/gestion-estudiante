@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Área TIC — IFDC</title>
   <link rel="stylesheet" href="/styles.css">
+  <style>
+    .tab-btn {
+      padding: 10px 18px; font-size: 14px; font-weight: 600;
+      border: none; background: none; cursor: pointer;
+      color: var(--text-3); border-bottom: 3px solid transparent;
+      margin-bottom: -2px; transition: color .15s, border-color .15s;
+      font-family: inherit;
+    }
+    .tab-btn:hover { color: var(--primary); }
+    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 0; }
+  </style>
 </head>
 <body>
 
@@ -42,14 +54,27 @@
   <!-- Panel -->
   <div id="panel" style="display:none">
     <div class="page-hero">
-      <h1>Carga en plataforma</h1>
-      <p>Estudiantes aprobados por Secretaría pendientes de alta en la plataforma institucional.</p>
+      <h1>Área TIC</h1>
+      <p>Gestión de alumnos en la plataforma institucional.</p>
     </div>
 
     <!-- Stats -->
     <div class="grid grid-2" style="gap:16px;margin-bottom:20px" id="statsRow"></div>
 
-    <div class="card">
+    <!-- Pestañas -->
+    <div class="tabs" style="margin-bottom:0">
+      <button class="tab-btn active" id="nav-ingresantes" onclick="cambiarTab('ingresantes')">
+        🎓 Ingresantes
+        <span id="badgeIngresantes" style="display:none;background:var(--warn);color:#fff;border-radius:999px;font-size:11px;padding:1px 7px;margin-left:6px"></span>
+      </button>
+      <button class="tab-btn" id="nav-materias" onclick="cambiarTab('materias')">
+        📚 Nuevas materias
+        <span id="badgeMaterias" style="display:none;background:var(--warn);color:#fff;border-radius:999px;font-size:11px;padding:1px 7px;margin-left:6px"></span>
+      </button>
+    </div>
+
+    <!-- Sección ingresantes -->
+    <div id="secIngresantes" class="card" style="border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
       <div class="filter-bar">
         <input type="search" id="busqueda" placeholder="Buscar por nombre, DNI o carrera..." oninput="filtrar()">
         <select id="filtroEstado" onchange="filtrar()" style="max-width:200px">
@@ -66,8 +91,8 @@
             <tr>
               <th>Estudiante</th>
               <th>DNI</th>
-              <th>Carrera</th>
-              <th>Año</th>
+              <th>Profesorado/s</th>
+              <th>Materias asignadas</th>
               <th>Estado</th>
               <th>Fecha carga</th>
               <th>Acción</th>
@@ -81,6 +106,34 @@
         </div>
       </div>
     </div>
+
+    <!-- Sección nuevas materias -->
+    <div id="secMaterias" class="card" style="display:none;border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
+      <div class="filter-bar">
+        <input type="search" id="busquedaMat" placeholder="Buscar por nombre o DNI..." oninput="filtrarMaterias()">
+        <button class="btn btn-secondary" onclick="cargarMaterias()">⟳ Actualizar</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Estudiante</th>
+              <th>DNI</th>
+              <th>Materia</th>
+              <th>Profesorado</th>
+              <th>Estado</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyMat"></tbody>
+        </table>
+        <div id="emptyStateMat" class="empty-state" style="display:none">
+          <div class="empty-state-icon">📚</div>
+          <p>No hay materias pendientes de carga.</p>
+        </div>
+      </div>
+    </div>
+
   </div>
 
 </main>
@@ -172,6 +225,11 @@ async function cargar() {
     todos = await res.json();
     renderStats();
     filtrar();
+    // Badge ingresantes pendientes
+    const pend = todos.filter(r => r.estado_general === 'aprobado_secretaria').length;
+    const badge = document.getElementById('badgeIngresantes');
+    if (pend > 0) { badge.textContent = pend; badge.style.display = 'inline'; }
+    else badge.style.display = 'none';
   } catch {
     document.getElementById('tbody').innerHTML = `<tr><td colspan="7" class="text-center text-muted">Error al cargar datos.</td></tr>`;
   }
@@ -223,21 +281,122 @@ function renderTabla(datos) {
       ? `<span class="pill pill-cargado">✓ Cargado</span>`
       : `<button class="btn btn-ok" style="padding:6px 14px;font-size:13px" onclick="marcar(${r.id_estudiante},'${esc(r.apellido)} ${esc(r.nombre)}')">Marcar cargado</button>`;
 
+    // Carreras del estudiante
+    const carreras = r.carreras && r.carreras.length
+      ? r.carreras.map(c => `<div class="text-sm">${esc(c.nombre_carrera)}</div>`).join('')
+      : `<div class="text-sm">${esc(r.nombre_carrera)}</div>`;
+
+    // Materias del estudiante
+    const materias = r.materias && r.materias.length
+      ? `<div style="display:flex;flex-wrap:wrap;gap:4px">
+          ${r.materias.map(m => `
+            <span class="pill" style="background:var(--primary-light);color:var(--primary);font-size:11px">
+              ${esc(m.nombre_materia)}
+            </span>`).join('')}
+         </div>`
+      : '<span class="text-sm text-muted">Sin materias</span>';
+
     return `
       <tr>
         <td>
           <div class="td-name">${esc(r.apellido)}, ${esc(r.nombre)}</div>
-          <div class="td-sub">${esc(r.correo)}</div>
+          <div class="td-sub">${r.correo ? esc(r.correo) : '—'}</div>
         </td>
         <td>${esc(r.dni)}</td>
-        <td>${esc(r.nombre_carrera)}</td>
-        <td>${esc(r.anio_actual)}°</td>
+        <td>${carreras}</td>
+        <td>${materias}</td>
         <td>${estadoPill(r.estado_general)}</td>
         <td class="text-sm text-muted">${fechaCarga}</td>
         <td>${accion}</td>
       </tr>
     `;
   }).join('');
+}
+
+function cambiarTab(tab) {
+  const esIng = tab === 'ingresantes';
+  document.getElementById('secIngresantes').style.display = esIng ? 'block' : 'none';
+  document.getElementById('secMaterias').style.display    = esIng ? 'none'  : 'block';
+  document.getElementById('nav-ingresantes').classList.toggle('active',  esIng);
+  document.getElementById('nav-materias').classList.toggle('active',    !esIng);
+  if (!esIng) cargarMaterias();
+}
+
+let todasMaterias = [];
+
+async function cargarMaterias() {
+  try {
+    const res  = await fetch(API + '/tic/nuevas-materias', { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    todasMaterias = data.materias || [];
+
+    // Badge
+    const badge = document.getElementById('badgeMaterias');
+    if (todasMaterias.length > 0) { badge.textContent = todasMaterias.length; badge.style.display = 'inline'; }
+    else badge.style.display = 'none';
+
+    filtrarMaterias();
+  } catch {
+    document.getElementById('tbodyMat').innerHTML =
+      `<tr><td colspan="6" class="text-center text-muted">Error al cargar.</td></tr>`;
+  }
+}
+
+function filtrarMaterias() {
+  const busq  = document.getElementById('busquedaMat').value.toLowerCase();
+  const datos = todasMaterias.filter(r =>
+    `${r.apellido} ${r.nombre} ${r.dni}`.toLowerCase().includes(busq)
+  );
+  renderMaterias(datos);
+}
+
+function renderMaterias(datos) {
+  const tb    = document.getElementById('tbodyMat');
+  const empty = document.getElementById('emptyStateMat');
+  if (!datos.length) { tb.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  tb.innerHTML = datos.map(r => `
+    <tr>
+      <td>
+        <div class="td-name">${esc(r.apellido)}, ${esc(r.nombre)}</div>
+        <div class="td-sub">${r.correo ? esc(r.correo) : '—'}</div>
+      </td>
+      <td>${esc(r.dni)}</td>
+      <td><strong>${esc(r.nombre_materia)}</strong></td>
+      <td class="text-sm">${esc(r.nombre_carrera)}</td>
+      <td><span class="pill pill-pendiente">Pendiente carga</span></td>
+      <td>
+        <button class="btn btn-ok" style="padding:6px 14px;font-size:13px"
+          onclick="marcarMateria(${r.id_inscripcion_materia}, '${esc(r.apellido)} ${esc(r.nombre)}', '${esc(r.nombre_materia)}')">
+          Marcar cargada
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function marcarMateria(idInscripcion, nombre, materia) {
+  const ok = await confirmar({
+    titulo:  'Marcar como cargada',
+    mensaje: `¿Confirmás que ${nombre} fue dado de alta en la materia "${materia}" en la plataforma?`,
+    btnOk:   'Sí, marcar'
+  });
+  if (!ok) return;
+
+  try {
+    const res  = await fetch(API + '/tic/cargar-materia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_inscripcion_materia: idInscripcion }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) await cargarMaterias();
+    else alert(data.error || 'Error al registrar.');
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
 }
 
 async function marcar(id, nombre) {

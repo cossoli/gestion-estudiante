@@ -189,6 +189,15 @@ function renderTodo(materias) {
 function renderMateria(m) {
   const { alumnos } = datosCargados[m.id_materia] || { alumnos: [] };
 
+  function estadoInscripcion(estado) {
+    return {
+      habilitado: '<span class="pill pill-aprobado">En curso</span>',
+      pendiente:  '<span class="pill pill-pendiente">Pendiente</span>',
+      observado:  '<span class="pill pill-observado">Observado</span>',
+      rechazado:  '<span class="pill pill-rechazado">No habilitado</span>',
+    }[estado] || '<span class="text-muted">—</span>';
+  }
+
   const resultadoPill = r => ({
     aprobado:    '<span class="pill pill-aprobado">Aprobado</span>',
     desaprobado: '<span class="pill pill-rechazado">Desaprobado</span>',
@@ -229,20 +238,21 @@ function renderMateria(m) {
                     <div class="td-sub">${esc(a.correo || '')}</div>
                   </td>
                   <td>${esc(a.dni)}</td>
-                  <td>${resultadoPill(a.resultado)}</td>
+                  <td>${estadoInscripcion(a.estado_secretaria)}</td>
+                  <td>${resultadoPill(a.resultado_cursada)}</td>
                   <td>
-                    <select class="resultado-select" id="sel-${a.id_cursada}">
+                    <select class="resultado-select" id="sel-${a.id_inscripcion_materia}">
                       <option value="">— Sin cambio —</option>
-                      <option value="aprobado"    ${a.resultado==='aprobado'    ?'selected':''}>Aprobado</option>
-                      <option value="desaprobado" ${a.resultado==='desaprobado' ?'selected':''}>Desaprobado</option>
-                      <option value="promocion"   ${a.resultado==='promocion'   ?'selected':''}>Promoción</option>
-                      <option value="ausente"     ${a.resultado==='ausente'     ?'selected':''}>Ausente</option>
-                      <option value="abandono"    ${a.resultado==='abandono'    ?'selected':''}>Abandono</option>
+                      <option value="aprobado"    ${a.resultado_cursada==='aprobado'    ?'selected':''}>Aprobado</option>
+                      <option value="desaprobado" ${a.resultado_cursada==='desaprobado' ?'selected':''}>Desaprobado</option>
+                      <option value="promocion"   ${a.resultado_cursada==='promocion'   ?'selected':''}>Promoción</option>
+                      <option value="ausente"     ${a.resultado_cursada==='ausente'     ?'selected':''}>Ausente</option>
+                      <option value="abandono"    ${a.resultado_cursada==='abandono'    ?'selected':''}>Abandono</option>
                     </select>
                   </td>
                   <td>
                     <button class="btn btn-primary" style="padding:6px 14px;font-size:13px"
-                      onclick="guardarResultado(${a.id_cursada},'${esc(a.apellido)} ${esc(a.nombre)}')">
+                      onclick="guardarResultado(${a.id_inscripcion_materia},'${esc(a.apellido)} ${esc(a.nombre)}')">
                       Guardar
                     </button>
                   </td>
@@ -256,8 +266,8 @@ function renderMateria(m) {
   `;
 }
 
-async function guardarResultado_DEPRECADO(idCursada, nombre) {
-  const sel       = document.getElementById('sel-' + idCursada);
+async function guardarResultado(idInscripcion, nombre) {
+  const sel       = document.getElementById('sel-' + idInscripcion);
   const resultado = sel?.value;
   if (!resultado) return;
 
@@ -272,7 +282,7 @@ async function guardarResultado_DEPRECADO(idCursada, nombre) {
     const res  = await fetch(API + '/docente/cursadas/resultado', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id_cursada: idCursada, resultado }),
+      body: JSON.stringify({ id_inscripcion_materia: idInscripcion, resultado }),
       signal: AbortSignal.timeout(8000)
     });
     const data = await res.json();

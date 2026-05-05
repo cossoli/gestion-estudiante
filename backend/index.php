@@ -566,11 +566,18 @@ try {
             // Inscripciones a materias del año lectivo actual
             $mStmt = $pdo->prepare(
                 "SELECT im.id_inscripcion_materia, im.estado_secretaria AS estado_condicion,
-                        im.observaciones, m.id_materia, m.nombre_materia, m.codigo_materia, m.formato
+                        im.observaciones, m.id_materia, m.nombre_materia, m.codigo_materia,
+                        m.formato, m.cuatrimestre, m.anio_plan,
+                        c2.nombre_carrera AS carrera_materia,
+                        cu.resultado AS resultado_cursada
                  FROM inscripciones_materias im
                  JOIN materias m ON m.id_materia = im.id_materia
+                 JOIN carreras c2 ON c2.id_carrera = m.id_carrera
+                 LEFT JOIN cursadas cu ON cu.id_estudiante = im.id_estudiante
+                   AND cu.id_materia = im.id_materia
+                   AND cu.anio_cursada = im.anio_lectivo
                  WHERE im.id_estudiante = ? AND im.anio_lectivo = ?
-                 ORDER BY m.anio_plan, m.nombre_materia"
+                 ORDER BY c2.nombre_carrera, m.anio_plan, m.nombre_materia"
             );
             $mStmt->execute([$alumno['id_estudiante'], (int) date('Y')]);
             $materias = $mStmt->fetchAll();

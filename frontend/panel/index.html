@@ -311,7 +311,7 @@ function renderMaterias(materias) {
   }
 
   const pillEstado = {
-    habilitado: '<span class="pill pill-aprobado">Habilitada</span>',
+    habilitado: '<span class="pill pill-aprobado">En curso</span>',
     pendiente:  '<span class="pill pill-pendiente">Pendiente verificación</span>',
     observado:  '<span class="pill pill-observado">Observada</span>',
     rechazado:  '<span class="pill pill-rechazado">No habilitada</span>',
@@ -321,20 +321,44 @@ function renderMaterias(materias) {
     observado: 'pendiente', rechazado: 'no-apto',
   };
 
+  const obsInternas = ['Alta inicial', 'Alta inicial — 1° cuatrimestre 1° año'];
+
+  const resultadoPill = {
+    aprobado:    '<span class="pill pill-aprobado">✓ Aprobado</span>',
+    desaprobado: '<span class="pill pill-rechazado">✕ Desaprobado</span>',
+    promocion:   '<span class="pill" style="background:#e8f5ff;color:#1a6fa8">★ Promoción</span>',
+    ausente:     '<span class="pill pill-pendiente">Ausente</span>',
+    abandono:    '<span class="pill pill-rechazado">Abandono</span>',
+  };
+
   return `<div class="grid" style="gap:10px">` +
-    materias.map(m => `
-      <div class="materia-card ${claseCard[m.estado_secretaria] || ''}">
-        <div>
+    materias.map(m => {
+      const obsVisible = m.observaciones && !obsInternas.some(o => m.observaciones.includes(o))
+        ? m.observaciones : null;
+      // Si tiene resultado de cursada, mostrar ese en lugar de "En curso"
+      const estadoFinal = m.resultado_cursada
+        ? (resultadoPill[m.resultado_cursada] || pillEstado[m.estado_secretaria] || '')
+        : (pillEstado[m.estado_secretaria] || '');
+
+      const claseCardFinal = m.resultado_cursada
+        ? (['aprobado','promocion'].includes(m.resultado_cursada) ? 'apto' : 'no-apto')
+        : (claseCard[m.estado_secretaria] || '');
+
+      return `
+      <div class="materia-card ${claseCardFinal}">
+        <div style="flex:1">
           <div class="materia-nombre">${esc(m.nombre_materia)}</div>
           <div class="materia-meta">
             ${esc(m.codigo_materia || '')}
             ${m.formato === 'cuatrimestral' ? ` · ${m.cuatrimestre}° cuatrimestre` : ' · Anual'}
           </div>
-          ${m.observaciones ? `<div class="text-sm" style="color:var(--warn);margin-top:4px">⚠ ${esc(m.observaciones)}</div>` : ''}
+          ${obsVisible ? `<div class="text-sm" style="color:var(--warn);margin-top:4px">⚠ ${esc(obsVisible)}</div>` : ''}
         </div>
-        <div>${pillEstado[m.estado_secretaria] || ''}</div>
-      </div>
-    `).join('') +
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+          ${estadoFinal}
+        </div>
+      </div>`;
+    }).join('') +
   `</div>`;
 }
 

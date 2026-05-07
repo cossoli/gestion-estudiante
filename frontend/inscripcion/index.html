@@ -124,11 +124,11 @@
         <div class="grid grid-2" style="gap:16px">
 
           <div class="field">
-            <label class="field-label" for="apellido">Apellido *</label>
+            <label class="field-label" for="apellido">Apellido * *</label>
             <input id="apellido" name="apellido" placeholder="Ej: García" required autocomplete="family-name">
           </div>
           <div class="field">
-            <label class="field-label" for="nombre">Nombre/s *</label>
+            <label class="field-label" for="nombre">Nombre/s * *</label>
             <input id="nombre" name="nombre" placeholder="Ej: María Florencia" required autocomplete="given-name">
           </div>
           <div class="field">
@@ -138,24 +138,24 @@
             <span class="text-sm text-muted">Solo números. Será tu usuario para ingresar.</span>
           </div>
           <div class="field">
-            <label class="field-label" for="correo">Correo electrónico</label>
+            <label class="field-label" for="correo">Correo electrónico *</label>
             <input id="correo" name="correo" type="email" placeholder="tu@correo.com" autocomplete="email">
             <span class="text-sm text-muted">Para recibir notificaciones de Secretaría.</span>
           </div>
           <div class="field">
-            <label class="field-label" for="telefono">Teléfono / Celular</label>
+            <label class="field-label" for="telefono">Teléfono / Celular *</label>
             <input id="telefono" name="telefono" placeholder="Ej: 2984123456" inputmode="tel">
           </div>
           <div class="field">
-            <label class="field-label" for="fecha_nacimiento">Fecha de nacimiento</label>
+            <label class="field-label" for="fecha_nacimiento">Fecha de nacimiento *</label>
             <input id="fecha_nacimiento" name="fecha_nacimiento" type="date">
           </div>
           <div class="field">
-            <label class="field-label" for="localidad">Localidad</label>
+            <label class="field-label" for="localidad">Localidad *</label>
             <input id="localidad" name="localidad" placeholder="Ej: Río Colorado">
           </div>
           <div class="field col-full">
-            <label class="field-label" for="domicilio">Domicilio</label>
+            <label class="field-label" for="domicilio">Domicilio *</label>
             <input id="domicilio" name="domicilio" placeholder="Calle, número, barrio">
           </div>
 
@@ -172,7 +172,7 @@
 
           <!-- Año de cohorte -->
           <div class="field">
-            <label class="field-label" for="anio_cohorte">Año de ingreso (cohorte)</label>
+            <label class="field-label" for="anio_cohorte">Año de ingreso (cohorte) *</label>
             <input id="anio_cohorte" name="anio_cohorte" type="number"
                    placeholder="Ej: 2025" min="2000" max="2099" inputmode="numeric">
           </div>
@@ -182,7 +182,7 @@
             <p class="card-subtitle" style="margin-bottom:16px">Documentación requerida en PDF</p>
             <div class="grid grid-2" style="gap:16px">
               <div class="field">
-                <label class="field-label">Copia del DNI (PDF)</label>
+                <label class="field-label">Copia del DNI (PDF) *</label>
                 <div class="file-field" id="fieldDni">
                   <input type="file" id="pdf_dni" name="pdf_dni" accept="application/pdf"
                          onchange="mostrarArchivo(this,'fieldDni','nameDni')">
@@ -192,7 +192,7 @@
                 </div>
               </div>
               <div class="field">
-                <label class="field-label">Título secundario (PDF)</label>
+                <label class="field-label">Título secundario (PDF) *</label>
                 <div class="file-field" id="fieldTitulo">
                   <input type="file" id="pdf_titulo_secundario" name="pdf_titulo_secundario" accept="application/pdf"
                          onchange="mostrarArchivo(this,'fieldTitulo','nameTitulo')">
@@ -343,12 +343,35 @@ async function enviar(e) {
   const status = document.getElementById('status');
   clearStatus(status);
 
-  const dni = document.getElementById('dni').value.trim();
+  const apellido        = document.getElementById('apellido').value.trim();
+  const nombre          = document.getElementById('nombre').value.trim();
+  const dni             = document.getElementById('dni').value.trim();
+  const correo          = document.getElementById('correo').value.trim();
+  const telefono        = document.getElementById('telefono').value.trim();
+  const fechaNacimiento = document.getElementById('fecha_nacimiento').value.trim();
+  const localidad       = document.getElementById('localidad').value.trim();
+  const domicilio       = document.getElementById('domicilio').value.trim();
+  const anioCohorte     = document.getElementById('anio_cohorte').value.trim();
+  const pdfDni          = document.getElementById('pdf_dni').files[0];
+  const pdfTitulo       = document.getElementById('pdf_titulo_secundario').files[0];
+
   const carrerasSeleccionadas = [...document.querySelectorAll('input[name="carreras"]:checked')]
     .map(el => parseInt(el.value));
 
-  if (!validarDNI(dni))              return setStatus(status, 'El DNI debe tener 7 u 8 dígitos numéricos.', 'warn');
+  // Validaciones obligatorias
+  if (!apellido)              return setStatus(status, 'El apellido es obligatorio.', 'warn');
+  if (!nombre)                return setStatus(status, 'El nombre es obligatorio.', 'warn');
+  if (!validarDNI(dni))       return setStatus(status, 'El DNI debe tener 7 u 8 dígitos numéricos.', 'warn');
+  if (!correo)                return setStatus(status, 'El correo electrónico es obligatorio.', 'warn');
+  if (!validarEmail(correo))  return setStatus(status, 'El correo no tiene un formato válido.', 'warn');
+  if (!telefono)              return setStatus(status, 'El teléfono es obligatorio.', 'warn');
+  if (!fechaNacimiento)       return setStatus(status, 'La fecha de nacimiento es obligatoria.', 'warn');
+  if (!localidad)             return setStatus(status, 'La localidad es obligatoria.', 'warn');
+  if (!domicilio)             return setStatus(status, 'El domicilio es obligatorio.', 'warn');
+  if (!anioCohorte)           return setStatus(status, 'El año de ingreso (cohorte) es obligatorio.', 'warn');
   if (!carrerasSeleccionadas.length) return setStatus(status, 'Seleccioná al menos un profesorado.', 'warn');
+  if (!pdfDni)                return setStatus(status, 'Debés adjuntar la copia del DNI en PDF.', 'warn');
+  if (!pdfTitulo)             return setStatus(status, 'Debés adjuntar el título secundario en PDF.', 'warn');
 
   const esNuevo = !dniSesion;
   const ok = await confirmar({

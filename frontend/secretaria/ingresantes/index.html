@@ -131,6 +131,30 @@
   </div>
 </div>
 
+<!-- Modal ficha estudiante -->
+<div class="modal-overlay hidden" id="modalFicha">
+  <div class="modal" style="max-width:620px;padding:0;overflow:hidden">
+    <!-- Header del modal -->
+    <div style="background:linear-gradient(135deg,#1a3fa8,#2e7d32);padding:24px 28px;color:#fff">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:14px">
+          <div style="width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700" id="fichaAvatar"></div>
+          <div>
+            <div style="font-size:18px;font-weight:700" id="fichaNombre"></div>
+            <div style="font-size:13px;opacity:.85" id="fichaCarrera"></div>
+          </div>
+        </div>
+        <button onclick="cerrarFicha()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">×</button>
+      </div>
+      <div style="margin-top:14px" id="fichaEstadoPill"></div>
+    </div>
+    <!-- Cuerpo -->
+    <div style="padding:24px 28px;max-height:65vh;overflow-y:auto" id="fichaCuerpo"></div>
+    <!-- Footer -->
+    <div style="padding:16px 28px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px" id="fichaFooter"></div>
+  </div>
+</div>
+
 <script src="/app.js"></script>
 <script>
 let todosLosInscriptos = [];
@@ -216,7 +240,9 @@ function renderTabla(datos) {
     return `
       <tr>
         <td>
-          <div class="td-name">${esc(r.apellido)}, ${esc(r.nombre)}</div>
+          <div class="td-name" style="cursor:pointer;color:var(--primary)" onclick='abrirFicha(${JSON.stringify(r).replace(/'/g, "&#39;")})'>
+            ${esc(r.apellido)}, ${esc(r.nombre)}
+          </div>
           <div class="td-sub">${r.correo ? esc(r.correo) : '<span style="color:var(--warn)">Sin correo</span>'}</div>
         </td>
         <td>${esc(r.dni)}</td>
@@ -319,6 +345,78 @@ function abrirCorreo(correo, nombre, estado, observaciones) {
   const overlay = document.getElementById('modalCorreo');
   overlay.classList.remove('hidden');
   document.getElementById('modalCorreoCerrar').onclick = () => overlay.classList.add('hidden');
+}
+
+function abrirFicha(r) {
+  // Header
+  document.getElementById('fichaAvatar').textContent  = r.apellido ? r.apellido[0].toUpperCase() : '?';
+  document.getElementById('fichaNombre').textContent  = r.apellido + ', ' + r.nombre;
+  const carreras = r.carreras && r.carreras.length
+    ? r.carreras.map(c => c.nombre_carrera).join(' · ')
+    : (r.nombre_carrera || '—');
+  document.getElementById('fichaCarrera').textContent = carreras;
+  document.getElementById('fichaEstadoPill').innerHTML = estadoPill(r.estado_general);
+
+  // Cuerpo
+  const fila = (label, valor) => `
+    <div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="min-width:160px;font-size:13px;color:var(--text-3);font-weight:500">${label}</span>
+      <span style="font-size:14px;color:var(--text-1);font-weight:500">${valor || '<span style="color:var(--text-3)">—</span>'}</span>
+    </div>`;
+
+  const fechaNac = r.fecha_nacimiento
+    ? new Date(r.fecha_nacimiento).toLocaleDateString('es-AR')
+    : null;
+
+  const carrerasHtml = r.carreras && r.carreras.length
+    ? r.carreras.map(c => `${esc(c.nombre_carrera)} <span style="color:var(--text-3)">(${c.anio_actual}° año)</span>`).join('<br>')
+    : esc(r.nombre_carrera || '—');
+
+  const docsHtml = [
+    r.pdf_dni ? `<a href="${esc(API+'/'+r.pdf_dni)}" target="_blank" class="btn btn-secondary" style="padding:5px 12px;font-size:13px">📄 Ver DNI</a>` : '<span style="color:var(--text-3);font-size:13px">Sin DNI</span>',
+    r.pdf_titulo_secundario ? `<a href="${esc(API+'/'+r.pdf_titulo_secundario)}" target="_blank" class="btn btn-secondary" style="padding:5px 12px;font-size:13px">📄 Ver Título</a>` : '<span style="color:var(--text-3);font-size:13px">Sin título</span>'
+  ].join('&nbsp;&nbsp;');
+
+  document.getElementById('fichaCuerpo').innerHTML = `
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:4px">Datos personales</div>
+      ${fila('DNI', esc(r.dni))}
+      ${fila('Correo', r.correo ? `<a href="mailto:${esc(r.correo)}" style="color:var(--primary)">${esc(r.correo)}</a>` : null)}
+      ${fila('Teléfono', esc(r.telefono))}
+      ${fila('Fecha de nacimiento', fechaNac)}
+      ${fila('Domicilio', esc(r.domicilio))}
+      ${fila('Localidad', esc(r.localidad))}
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:4px">Carrera/s</div>
+      ${fila('Profesorado/s', carrerasHtml)}
+      ${fila('Año de cohorte', esc(r.anio_cohorte ? String(r.anio_cohorte) : null))}
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:8px">Documentación</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">${docsHtml}</div>
+    </div>
+    ${r.observaciones_secretaria ? `
+    <div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:4px">Observaciones</div>
+      <div style="background:var(--warn-bg);border:1px solid #f5dcb0;border-radius:var(--radius-sm);padding:12px;font-size:13px">${esc(r.observaciones_secretaria)}</div>
+    </div>` : ''}
+  `;
+
+  // Footer con acciones
+  const esPendiente = ['pendiente_secretaria','observado_secretaria'].includes(r.estado_general);
+  document.getElementById('fichaFooter').innerHTML = esPendiente ? `
+    <button class="btn btn-secondary" onclick="cerrarFicha()">Cerrar</button>
+    <button class="btn btn-warn" style="font-size:13px" onclick="cerrarFicha();accion(${r.id_estudiante},'observar','${esc(r.apellido)} ${esc(r.nombre)}','${esc(r.correo||'')}')">⚠ Observar</button>
+    <button class="btn btn-bad"  style="font-size:13px" onclick="cerrarFicha();accion(${r.id_estudiante},'rechazar','${esc(r.apellido)} ${esc(r.nombre)}','${esc(r.correo||'')}')">✕ Rechazar</button>
+    <button class="btn btn-ok"   style="font-size:13px" onclick="cerrarFicha();accion(${r.id_estudiante},'aprobar','${esc(r.apellido)} ${esc(r.nombre)}','${esc(r.correo||'')}')">✓ Aprobar</button>
+  ` : `<button class="btn btn-secondary" onclick="cerrarFicha()">Cerrar</button>`;
+
+  document.getElementById('modalFicha').classList.remove('hidden');
+}
+
+function cerrarFicha() {
+  document.getElementById('modalFicha').classList.add('hidden');
 }
 </script>
 </body>

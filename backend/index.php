@@ -314,7 +314,9 @@ try {
     // ── Secretaría: listado ────────────────────────────────────────────────────
     if ($path === '/secretaria/inscriptos' && $_SERVER['REQUEST_METHOD'] === 'GET') {
         $stmt = $pdo->query(
-            "SELECT e.id_estudiante, e.apellido, e.nombre, e.dni, e.correo, e.anio_actual, e.estado_general,
+            "SELECT e.id_estudiante, e.apellido, e.nombre, e.dni, e.correo, e.telefono,
+                    e.fecha_nacimiento, e.domicilio, e.localidad, e.anio_actual, e.anio_cohorte,
+                    e.estado_general,
                     c.nombre_carrera, r.estado_secretaria, r.observaciones_secretaria,
                     d.pdf_dni, d.pdf_titulo_secundario
              FROM estudiantes e
@@ -323,7 +325,27 @@ try {
              LEFT JOIN documentos_estudiante d ON d.id_estudiante = e.id_estudiante
              ORDER BY e.fecha_registro DESC"
         );
-        respond($stmt->fetchAll());
+        $rows = $stmt->fetchAll();
+
+        // Agregar carreras de estudiante_carreras
+        foreach ($rows as &$row) {
+            $cStmt = $pdo->prepare(
+                "SELECT ec.id_carrera, ec.anio_actual, ec.anio_cohorte, c.nombre_carrera
+                 FROM estudiante_carreras ec
+                 JOIN carreras c ON c.id_carrera = ec.id_carrera
+                 WHERE ec.id_estudiante = ?"
+            );
+            $cStmt->execute([$row['id_estudiante']]);
+            $carreras = $cStmt->fetchAll();
+            $row['carreras'] = !empty($carreras) ? $carreras : [[
+                'id_carrera'     => null,
+                'nombre_carrera' => $row['nombre_carrera'],
+                'anio_actual'    => $row['anio_actual'],
+            ]];
+        }
+        unset($row);
+
+        respond($rows);
     }
 
     // ── Secretaría: acción ────────────────────────────────────────────────────

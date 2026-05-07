@@ -107,6 +107,9 @@
           📝 Exámenes finales
           <span id="badgeFinales" style="display:none;background:var(--bad);color:#fff;border-radius:999px;font-size:11px;padding:1px 7px;margin-left:6px"></span>
         </button>
+        <button class="tab-btn" id="nav-historial" onclick="cambiarSeccion('historial')">
+          📋 Historial académico
+        </button>
       </div>
 
       <!-- Sección: Mis materias -->
@@ -123,6 +126,14 @@
         <h3 class="card-title" style="margin-bottom:6px">Exámenes finales</h3>
         <p class="text-sm text-muted" style="margin-bottom:16px">Mesas abiertas para inscripción. Solo podés anotarte a materias que tenés aprobada la cursada.</p>
         <div id="mesasContenido"></div>
+      </div>
+
+      <!-- Sección: Historial académico -->
+      <div id="seccionHistorial" class="card" style="display:none;border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
+        <h3 class="card-title" style="margin-bottom:16px">Historial académico</h3>
+        <div id="historialContenido">
+          <div class="text-sm text-muted text-center" style="padding:20px">Cargando historial...</div>
+        </div>
       </div>
 
     </div>
@@ -455,12 +466,14 @@ async function inscribirse(idMateria, nombreMateria) {
 cargar();
 
 function cambiarSeccion(seccion) {
-  const esMaterias = seccion === 'materias';
-  document.getElementById('seccionMaterias').style.display = esMaterias ? 'block' : 'none';
-  document.getElementById('seccionFinales').style.display  = esMaterias ? 'none'  : 'block';
-  document.getElementById('nav-materias').classList.toggle('active',  esMaterias);
-  document.getElementById('nav-finales').classList.toggle('active',  !esMaterias);
-  if (!esMaterias) cargarMesas();
+  document.getElementById('seccionMaterias').style.display  = seccion === 'materias'  ? 'block' : 'none';
+  document.getElementById('seccionFinales').style.display   = seccion === 'finales'   ? 'block' : 'none';
+  document.getElementById('seccionHistorial').style.display = seccion === 'historial' ? 'block' : 'none';
+  document.getElementById('nav-materias').classList.toggle('active',  seccion === 'materias');
+  document.getElementById('nav-finales').classList.toggle('active',   seccion === 'finales');
+  document.getElementById('nav-historial').classList.toggle('active', seccion === 'historial');
+  if (seccion === 'finales')   cargarMesas();
+  if (seccion === 'historial') cargarHistorial();
 }
 
 async function cargarMesas() {
@@ -590,6 +603,86 @@ async function anotarseAMesa(idMesa, nombreMateria) {
     else alert(data.error || 'No se pudo registrar la inscripción.');
   } catch {
     alert('No se pudo conectar con el servidor.');
+  }
+}
+
+async function cargarHistorial() {
+  const cont = document.getElementById('historialContenido');
+  cont.innerHTML = '<div class="text-sm text-muted text-center" style="padding:20px">Cargando...</div>';
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(API + '/alumno/historial-cursadas?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(8000) }),
+      fetch(API + '/alumno/resultados-finales?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(8000) })
+    ]);
+    const dataCurs = await r1.json();
+    const dataFin  = await r2.json();
+    const cursadas  = dataCurs.cursadas  || [];
+    const finales   = dataFin.resultados || [];
+
+    const turnoLabel = { feb_mar: 'Feb - Mar', julio: 'Julio', nov_dic: 'Nov - Dic' };
+
+    const resPillCurs = {
+      aprobado:    '<span class="pill pill-aprobado">✓ Aprobado</span>',
+      desaprobado: '<span class="pill pill-rechazado">✕ Desaprobado</span>',
+      promocion:   '<span class="pill" style="background:#e8f5ff;color:#1a6fa8">★ Promoción</span>',
+      ausente:     '<span class="pill pill-pendiente">Ausente</span>',
+      abandono:    '<span class="pill pill-rechazado">Abandono</span>',
+    };
+    const resPillFin = {
+      aprobado:  '<span class="pill pill-aprobado">✓ Aprobado</span>',
+      reprobado: '<span class="pill pill-rechazado">✕ Reprobado</span>',
+      ausente:   '<span class="pill pill-pendiente">Ausente</span>',
+    };
+
+    let html = '';
+
+    // ── Cursadas ──
+    html += `<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:10px">Cursadas</div>`;
+
+    if (!cursadas.length) {
+      html += `<div class="empty-state" style="padding:20px"><p class="text-sm">No hay cursadas registradas.</p></div>`;
+    } else {
+      html += `<div class="table-wrap" style="margin-bottom:24px"><table>
+        <thead><tr><th>Materia</th><th>Profesorado</th><th>Año</th><th>Resultado</th></tr></thead>
+        <tbody>
+          ${cursadas.map(c => `
+            <tr>
+              <td><strong>${esc(c.nombre_materia)}</strong></td>
+              <td class="text-sm text-muted">${esc(c.nombre_carrera)}</td>
+              <td class="text-sm">${esc(String(c.anio_cursada))}</td>
+              <td>${resPillCurs[c.resultado] || '<span class="text-muted">—</span>'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table></div>`;
+    }
+
+    // ── Exámenes finales rendidos ──
+    html += `<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:10px;padding-top:8px;border-top:1px solid var(--border)">Exámenes finales rendidos</div>`;
+
+    if (!finales.length) {
+      html += `<div class="empty-state" style="padding:20px"><p class="text-sm">No hay exámenes finales rendidos.</p></div>`;
+    } else {
+      html += `<div class="table-wrap"><table>
+        <thead><tr><th>Materia</th><th>Profesorado</th><th>Turno</th><th>Fecha</th><th>Nota</th><th>Resultado</th></tr></thead>
+        <tbody>
+          ${finales.map(f => `
+            <tr>
+              <td><strong>${esc(f.nombre_materia)}</strong></td>
+              <td class="text-sm text-muted">${esc(f.nombre_carrera)}</td>
+              <td class="text-sm">${turnoLabel[f.turno] || f.turno} ${esc(String(f.anio))}</td>
+              <td class="text-sm">${f.fecha_mesa ? new Date(f.fecha_mesa).toLocaleDateString('es-AR') : '—'}</td>
+              <td><strong style="font-size:16px">${f.nota_obtenida != null ? f.nota_obtenida : '—'}</strong></td>
+              <td>${resPillFin[f.resultado] || '<span class="text-muted">—</span>'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table></div>`;
+    }
+
+    cont.innerHTML = html;
+  } catch {
+    cont.innerHTML = '<div class="alert alert-error"><span>✕</span><span>Error al cargar historial.</span></div>';
   }
 }
 </script>

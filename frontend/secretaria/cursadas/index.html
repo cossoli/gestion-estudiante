@@ -299,7 +299,23 @@ function renderTabla(datos) {
             <td>${corrHtml}</td>
             <td>${pillEstado}</td>
             <td>${resultadoPill}</td>
-            <td>${acciones}</td>
+            <td>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                <select id="sec-sel-${m.id_inscripcion_materia}"
+                  style="padding:4px 8px;font-size:12px;border-radius:var(--radius-sm);border:1.5px solid var(--border);font:inherit;min-width:130px">
+                  <option value="">— Cargar resultado —</option>
+                  <option value="aprobado"    ${m.resultado_cursada==='aprobado'    ?'selected':''}>Aprobado</option>
+                  <option value="desaprobado" ${m.resultado_cursada==='desaprobado' ?'selected':''}>Desaprobado</option>
+                  <option value="promocion"   ${m.resultado_cursada==='promocion'   ?'selected':''}>Promoción</option>
+                  <option value="ausente"     ${m.resultado_cursada==='ausente'     ?'selected':''}>Ausente</option>
+                  <option value="abandono"    ${m.resultado_cursada==='abandono'    ?'selected':''}>Abandono</option>
+                </select>
+                <button class="btn btn-primary" style="padding:4px 10px;font-size:12px"
+                  onclick="guardarResultadoSec(${m.id_inscripcion_materia},'${esc(a.apellido)} ${esc(a.nombre)}','${esc(m.nombre_materia)}')">
+                  Guardar
+                </button>
+              </div>
+            </td>
           </tr>
         `);
       });
@@ -397,6 +413,33 @@ function abrirCorreoNoApto(correo, nombre, materia, observaciones) {
   const overlay = document.getElementById('modalCorreo');
   overlay.classList.remove('hidden');
   document.getElementById('modalCorreoCerrar').onclick = () => overlay.classList.add('hidden');
+}
+
+async function guardarResultadoSec(idInscripcion, nombre, nombreMateria) {
+  const sel       = document.getElementById('sec-sel-' + idInscripcion);
+  const resultado = sel?.value;
+  if (!resultado) return;
+
+  const ok = await confirmar({
+    titulo:  'Cargar resultado de cursada',
+    mensaje: `¿Confirmás cargar "${resultado}" para ${nombre} en ${nombreMateria}?`,
+    btnOk:   'Sí, guardar'
+  });
+  if (!ok) return;
+
+  try {
+    const res  = await fetch(API + '/docente/cursadas/resultado', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_inscripcion_materia: idInscripcion, resultado }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) await cargar();
+    else alert(data.error || 'Error al guardar.');
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
 }
 </script>
 </body>

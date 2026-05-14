@@ -97,7 +97,7 @@
 <div class="modal-overlay hidden" id="modalMesa">
   <div class="modal" style="max-width:540px">
     <h3 class="modal-title" id="modalMesaTitulo">Nueva mesa de examen</h3>
-    <div class="modal-body">
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto">
       <div class="grid" style="gap:14px">
 
         <div class="field">
@@ -377,7 +377,7 @@ function abrirModalMesa() {
 }
 
 async function editarMesa(id) {
-  const mesa = todasLasMesas.find(m => m.id_mesa === id);
+  const mesa = todasLasMesas.find(m => m.id_mesa === parseInt(id));
   if (!mesa) return;
   mesaEditandoId = id;
   document.getElementById('modalMesaTitulo').textContent = 'Editar mesa';
@@ -447,6 +447,7 @@ async function guardarMesa() {
 }
 
 async function toggleMesa(id, estaActiva) {
+  id = parseInt(id);
   const ok = await confirmar({
     titulo:  estaActiva ? 'Cerrar inscripción' : 'Reabrir inscripción',
     mensaje: estaActiva

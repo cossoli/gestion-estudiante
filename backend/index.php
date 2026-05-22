@@ -754,8 +754,9 @@ try {
 
         // Puede venir solo 'activa' (toggle) o todos los campos
         if (isset($data['activa']) && count($data) === 1) {
-            $pdo->prepare("UPDATE mesas_finales SET activa = ? WHERE id_mesa = ?")
-                ->execute([$data['activa'], $idMesa]);
+            $activa = filter_var($data['activa'], FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+            $pdo->prepare("UPDATE mesas_finales SET activa = ?::boolean WHERE id_mesa = ?")
+                ->execute([$activa, $idMesa]);
         } else {
             $idMateria = (int) ($data['id_materia'] ?? 0);
             $turno     = trim($data['turno'] ?? '');

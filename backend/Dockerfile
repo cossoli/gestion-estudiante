@@ -1,17 +1,14 @@
-FROM php:8.3-apache
+FROM php:8.3-fpm-alpine
 
-RUN apt-get update && apt-get install -y \
-    libpq-dev \
+RUN apk add --no-cache nginx postgresql-dev \
     && docker-php-ext-install pdo pdo_pgsql \
-    && a2enmod rewrite \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && sed -i 's/^ServerName.*//' /etc/apache2/apache2.conf || true
+    && mkdir -p /run/nginx
 
-# Deshabilitar MPM event y habilitar MPM prefork para evitar conflictos
-RUN a2dismod mpm_event || true \
-    && a2enmod mpm_prefork || true
-
+COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY . /var/www/html/
 
+RUN chown -R www-data:www-data /var/www/html
+
 EXPOSE 80
+
+CMD sh -c "php-fpm -D && nginx -g 'daemon off;'"

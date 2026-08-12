@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acceso docente — IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .carrera-bloque {
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .carrera-bloque-header {
+      background: var(--surface2);
+      padding: 12px 16px;
+      display: flex; align-items: center; gap: 10px;
+      cursor: pointer; user-select: none;
+    }
+    .carrera-bloque-header input { width: auto; }
+    .carrera-bloque-header span { font-weight: 600; font-size: 14px; }
+    .carrera-materias {
+      padding: 12px 16px;
+      display: none;
+      border-top: 1px solid var(--border);
+    }
+    .carrera-materias.visible { display: block; }
+    .materia-check {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px; font-size: 13px; cursor: pointer;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      transition: border-color .15s, background .15s;
+      margin-bottom: 6px;
+    }
+    .materia-check:hover { border-color: var(--primary); background: var(--primary-light); }
+    .materia-check.checked { border-color: var(--ok); background: var(--ok-bg); }
+    .materia-check input { width: auto; cursor: pointer; accent-color: var(--ok); width: 16px; height: 16px; }
+    .materia-anio {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--text-3);
+      padding: 12px 0 6px; margin-top: 4px;
+      border-top: 1px solid var(--border);
+    }
+    .materia-anio:first-child { border-top: none; margin-top: 0; padding-top: 4px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Panel Docente</div>
+      </div>
+    </div>
+    <nav class="header-nav" id="headerNav">
+      <a class="btn btn-secondary" href="/inicio/">← Menú principal</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <!-- Login -->
+  <div class="card card-sm" id="pantallaLogin">
+    <h2 class="card-title">Acceso docente</h2>
+    <p class="card-subtitle">Ingresá con tu DNI y contraseña. Si es tu primera vez, registrate abajo.</p>
+    <div class="grid" style="gap:14px">
+      <div class="field">
+        <label class="field-label" for="dniLogin">DNI</label>
+        <input id="dniLogin" type="text" placeholder="Sin puntos, ej: 35123456"
+               inputmode="numeric" maxlength="8" autocomplete="username">
+      </div>
+      <div class="field">
+        <label class="field-label" for="password">Contraseña</label>
+        <input id="password" type="password" placeholder="Tu contraseña" autocomplete="current-password">
+        <span class="text-sm text-muted">Si es tu primera vez, tu contraseña es tu DNI.</span>
+      </div>
+      <div id="loginStatus" class="alert" style="display:none"></div>
+      <button id="btnLogin" class="btn btn-primary btn-full" onclick="login()">Ingresar</button>
+      <div class="divider"></div>
+      <p class="text-sm text-muted text-center">
+        ¿No tenés cuenta?
+        <a href="#" onclick="mostrarRegistro()" style="color:var(--primary);font-weight:600">Registrarme</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Registro -->
+  <div class="card" id="pantallaRegistro" style="display:none;max-width:600px;margin:0 auto">
+    <h2 class="card-title">Registrarme como docente</h2>
+    <p class="card-subtitle">Completá tus datos y seleccioná las materias que dictás en cada profesorado.</p>
+    <div class="grid" style="gap:14px">
+
+      <div class="grid grid-2" style="gap:14px">
+        <div class="field">
+          <label class="field-label" for="regApellido">Apellido *</label>
+          <input id="regApellido" type="text" placeholder="Ej: García" autocomplete="family-name">
+        </div>
+        <div class="field">
+          <label class="field-label" for="regNombre">Nombre/s *</label>
+          <input id="regNombre" type="text" placeholder="Ej: Juan Carlos" autocomplete="given-name">
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="regDni">DNI *</label>
+        <input id="regDni" type="text" placeholder="Sin puntos, ej: 35123456"
+               inputmode="numeric" maxlength="8">
+        <span class="text-sm text-muted">Será tu usuario y contraseña inicial.</span>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="regEmail">Correo electrónico</label>
+        <input id="regEmail" type="email" placeholder="tu@correo.com" autocomplete="email">
+      </div>
+
+      <!-- Profesorados y materias -->
+      <div class="field">
+        <label class="field-label">Seleccioná las materias que dictás *</label>
+        <span class="text-sm text-muted" style="display:block;margin-bottom:10px">
+          Hacé clic en el nombre del profesorado para expandirlo y tildar tus materias.
+        </span>
+        <div id="bloqueCarreras">
+          <div class="text-sm text-muted">Cargando...</div>
+        </div>
+      </div>
+
+      <div id="registroStatus" class="alert" style="display:none"></div>
+
+      <button id="btnRegistro" class="btn btn-primary btn-full" onclick="registrar()">Crear mi cuenta</button>
+      <div class="divider"></div>
+      <p class="text-sm text-muted text-center">
+        ¿Ya tenés cuenta?
+        <a href="#" onclick="mostrarLogin()" style="color:var(--primary);font-weight:600">Ingresar</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Menú docente -->
+  <div id="menuDocente" style="display:none">
+    <div class="page-hero">
+      <h1 id="saludoDocente">Panel docente</h1>
+      <p id="saludoSub" class="text-muted"></p>
+    </div>
+
+    <div id="materiasResumen" class="card" style="margin-bottom:20px;display:none">
+      <h3 class="card-title" style="margin-bottom:12px">Mis materias asignadas</h3>
+      <div id="materiasLista"></div>
+    </div>
+
+    <div class="menu-grid">
+      <a class="menu-card" href="/docente/cursadas/">
+        <div class="menu-card-icon blue">📚</div>
+        <h3>Cursadas</h3>
+        <p>Ver los alumnos anotados en tus materias del cuatrimestre actual y cargar sus resultados.</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <span id="badgeCursadas" class="pill pill-observado" style="display:none"></span>
+          <span class="menu-card-arrow">→</span>
+        </div>
+      </a>
+      <a class="menu-card" href="/docente/finales/">
+        <div class="menu-card-icon green">📝</div>
+        <h3>Exámenes finales</h3>
+        <p>Ver los alumnos inscriptos a tus mesas de examen y cargar las notas finales.</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <span id="badgeFinales" class="pill pill-observado" style="display:none"></span>
+          <span class="menu-card-arrow">→</span>
+        </div>
+      </a>
+    </div>
+
+    <!-- ABM de materias -->
+    <div class="card" id="cardAbm" style="margin-top:20px;display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <h3 class="card-title" style="margin:0">Mis materias asignadas</h3>
+        <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="abrirAgregarMateria()">
+          + Agregar materia
+        </button>
+      </div>
+      <div id="abmContenido"></div>
+    </div>
+
+  </div>
+
+</main>
+
+<!-- Modal: agregar materia -->
+<div class="modal-overlay hidden" id="modalAgregarMateria">
+  <div class="modal" style="max-width:560px">
+    <h3 class="modal-title">Agregar materia</h3>
+    <p class="text-sm text-muted" style="margin-bottom:16px">Seleccioná el profesorado y la materia que querés agregar.</p>
+    <div class="grid" style="gap:14px">
+      <div class="field">
+        <label class="field-label">Profesorado</label>
+        <select id="abmCarrera" onchange="cargarMateriasAbm()">
+          <option value="">Seleccioná un profesorado</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Materia</label>
+        <select id="abmMateria">
+          <option value="">Primero seleccioná el profesorado</option>
+        </select>
+      </div>
+    </div>
+    <div id="abmStatus" class="alert" style="display:none;margin-top:12px"></div>
+    <div class="modal-footer" style="margin-top:16px">
+      <button class="btn btn-secondary" onclick="cerrarAgregarMateria()">Cancelar</button>
+      <button class="btn btn-primary" id="btnAgregarMateria" onclick="agregarMateria()">Agregar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal cambiar contraseña -->
+<div class="modal-overlay hidden" id="modalPassword">
+  <div class="modal" style="max-width:420px">
+    <h3 class="modal-title">Cambiar contraseña</h3>
+    <p class="text-sm text-muted" style="margin-bottom:16px">Ingresá tu contraseña actual y la nueva.</p>
+    <div class="grid" style="gap:14px">
+      <div class="field">
+        <label class="field-label" for="passActual">Contraseña actual</label>
+        <input id="passActual" type="password" placeholder="Tu contraseña actual" autocomplete="current-password">
+      </div>
+      <div class="field">
+        <label class="field-label" for="passNueva">Nueva contraseña</label>
+        <input id="passNueva" type="password" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+      </div>
+      <div class="field">
+        <label class="field-label" for="passNuevaConfirmar">Repetir nueva contraseña</label>
+        <input id="passNuevaConfirmar" type="password" placeholder="Repetí la nueva contraseña" autocomplete="new-password">
+      </div>
+    </div>
+    <div id="passwordStatus" class="alert" style="display:none;margin-top:12px"></div>
+    <div class="modal-footer" style="margin-top:16px">
+      <button class="btn btn-secondary" onclick="cerrarCambiarPassword()">Cancelar</button>
+      <button class="btn btn-primary" id="btnGuardarPassword" onclick="confirmarCambiarPassword()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmación -->
+<div class="modal-overlay hidden" id="modalConfirm">
+  <div class="modal">
+    <h3 class="modal-title" id="modalConfirmTitle">¿Confirmar?</h3>
+    <p class="modal-body text-sm text-muted" id="modalConfirmMsg"></p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modalConfirmCancel">Cancelar</button>
+      <button class="btn btn-primary" id="modalConfirmOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+<script>
+let materiasCache = {}; // { id_carrera: [materias] }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('pantallaLogin').style.display !== 'none') login();
+});
+
+// Restaurar sesión
+if (localStorage.getItem('docente_auth')) {
+  const doc = JSON.parse(localStorage.getItem('docente_data') || '{}');
+  mostrarMenu(doc);
+}
+
+function abrirCambiarPassword() {
+  const status = document.getElementById('passwordStatus');
+  clearStatus(status);
+  document.getElementById('passActual').value = '';
+  document.getElementById('passNueva').value = '';
+  document.getElementById('passNuevaConfirmar').value = '';
+  document.getElementById('modalPassword').classList.remove('hidden');
+}
+
+function cerrarCambiarPassword() {
+  document.getElementById('modalPassword').classList.add('hidden');
+}
+
+async function confirmarCambiarPassword() {
+  const doc = JSON.parse(localStorage.getItem('docente_data') || '{}');
+  const dni = doc.dni;
+  const passwordActual = document.getElementById('passActual').value.trim();
+  const passwordNueva = document.getElementById('passNueva').value.trim();
+  const passwordConfirmar = document.getElementById('passNuevaConfirmar').value.trim();
+  const status = document.getElementById('passwordStatus');
+  const btn = document.getElementById('btnGuardarPassword');
+
+  if (!dni) return setStatus(status, 'No se pudo identificar tu usuario. Volvé a iniciar sesión.', 'error');
+  if (!passwordActual || !passwordNueva || !passwordConfirmar) return setStatus(status, 'Completá los tres campos.', 'warn');
+  if (passwordNueva.length < 6) return setStatus(status, 'La nueva contraseña debe tener al menos 6 caracteres.', 'warn');
+  if (passwordNueva !== passwordConfirmar) return setStatus(status, 'Las contraseñas nuevas no coinciden.', 'warn');
+
+  setLoading(btn, true, 'Guardando...');
+  try {
+    const res = await fetch(API + '/docente/cambiar-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dni, password_actual: passwordActual, password_nueva: passwordNueva }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      setStatus(status, 'Contraseña actualizada correctamente.', 'ok');
+      setTimeout(cerrarCambiarPassword, 1500);
+    } else {
+      setStatus(status, data.error || 'No se pudo cambiar la contraseña.', 'error');
+    }
+  } catch {
+    setStatus(status, 'No se pudo conectar con el servidor.', 'error');
+  } finally {
+    setLoading(btn, false, 'Guardar');
+  }
+}
+
+function mostrarLogin() {
+  document.getElementById('pantallaRegistro').style.display = 'none';
+  document.getElementById('pantallaLogin').style.display    = 'block';
+}
+
+async function mostrarRegistro() {
+  document.getElementById('pantallaLogin').style.display    = 'none';
+  document.getElementById('pantallaRegistro').style.display = 'block';
+  await cargarBloqueCarreras();
+}
+
+// ── Cargar profesorados con materias ─────────────────────────────
+async function cargarBloqueCarreras() {
+  const cont = document.getElementById('bloqueCarreras');
+  try {
+    const res     = await fetch(API + '/carreras', { signal: AbortSignal.timeout(6000) });
+    const carreras = await res.json();
+
+    // Cargar materias de todas las carreras en paralelo
+    await Promise.all(carreras.map(async c => {
+      const r    = await fetch(API + '/materias?id_carrera=' + c.id_carrera, { signal: AbortSignal.timeout(6000) });
+      const data = await r.json();
+      materiasCache[c.id_carrera] = data;
+    }));
+
+    cont.innerHTML = carreras.map(c => {
+      const materias = materiasCache[c.id_carrera] || [];
+      // Agrupar por año
+      const porAnio = {};
+      materias.forEach(m => {
+        if (!porAnio[m.anio_plan]) porAnio[m.anio_plan] = [];
+        porAnio[m.anio_plan].push(m);
+      });
+
+      return `
+        <div class="carrera-bloque">
+          <div class="carrera-bloque-header" onclick="toggleBloque(${c.id_carrera})">
+            <span style="font-size:16px">📚</span>
+            <span>${esc(c.nombre_carrera)}</span>
+            <span id="badge-${c.id_carrera}" style="font-size:12px;color:var(--ok);font-weight:600;margin-left:8px"></span>
+            <span style="margin-left:auto;font-size:12px;color:var(--text-3)" id="arrow-${c.id_carrera}">▶ Expandir</span>
+          </div>
+          <div class="carrera-materias" id="materias-${c.id_carrera}">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <span class="text-sm text-muted">Tildá las materias que dictás:</span>
+              <div class="actions" style="gap:6px">
+                <button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:12px"
+                  onclick="seleccionarTodas(${c.id_carrera}, true)">Todas</button>
+                <button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:12px"
+                  onclick="seleccionarTodas(${c.id_carrera}, false)">Ninguna</button>
+              </div>
+            </div>
+            ${Object.entries(porAnio).map(([anio, mats]) => `
+              <div class="materia-anio">${anio}° año</div>
+              ${mats.map(m => `
+                <label class="materia-check" id="lbl-${c.id_carrera}-${m.id_materia}">
+                  <input type="checkbox" class="mat-check-${c.id_carrera}" value="${m.id_materia}"
+                    onchange="actualizarVisualMateria(this.closest('label'), this.checked); actualizarContador(this)">
+                  <span style="flex:1">
+                    <strong>${esc(m.nombre_materia)}</strong>
+                    <span style="color:var(--text-3);font-size:12px;margin-left:6px">
+                      ${m.formato === 'anual' ? 'Anual' : m.cuatrimestre + '° cuatrim.'}
+                    </span>
+                  </span>
+                  <span class="check-icon" style="font-size:16px;opacity:0;transition:opacity .15s">✓</span>
+                </label>
+              `).join('')}
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch {
+    cont.innerHTML = '<div class="alert alert-error"><span>✕</span><span>Error al cargar.</span></div>';
+  }
+}
+
+function toggleBloque(idCarrera) {
+  const bloque = document.getElementById('materias-' + idCarrera);
+  const arrow  = document.getElementById('arrow-' + idCarrera);
+  const visible = bloque.classList.toggle('visible');
+  arrow.textContent = visible ? '▼ Contraer' : '▶ Expandir';
+}
+
+function toggleMateria(label) {
+  const cb = label.querySelector('input[type="checkbox"]');
+  cb.checked = !cb.checked;
+  actualizarVisualMateria(label, cb.checked);
+  actualizarContador(cb);
+}
+
+function actualizarVisualMateria(label, checked) {
+  const icon = label.querySelector('.check-icon');
+  if (checked) {
+    label.classList.add('checked');
+    icon.style.opacity = '1';
+  } else {
+    label.classList.remove('checked');
+    icon.style.opacity = '0';
+  }
+}
+
+function actualizarContador(cb) {
+  // Extraer id carrera de la clase
+  const clase = [...cb.classList].find(c => c.startsWith('mat-check-'));
+  if (!clase) return;
+  const idCarrera = clase.replace('mat-check-', '');
+  const total = document.querySelectorAll('.mat-check-' + idCarrera).length;
+  const sel   = document.querySelectorAll('.mat-check-' + idCarrera + ':checked').length;
+  const badge = document.getElementById('badge-' + idCarrera);
+  if (badge) badge.textContent = sel > 0 ? sel + ' de ' + total + ' seleccionadas' : '';
+}
+
+function seleccionarTodas(idCarrera, checked) {
+  document.querySelectorAll('.mat-check-' + idCarrera).forEach(cb => {
+    cb.checked = checked;
+    const label = cb.closest('label');
+    if (label) actualizarVisualMateria(label, checked);
+  });
+  const total = document.querySelectorAll('.mat-check-' + idCarrera).length;
+  const badge = document.getElementById('badge-' + idCarrera);
+  if (badge) badge.textContent = checked ? total + ' de ' + total + ' seleccionadas' : '';
+}
+
+// ── Login ─────────────────────────────────────────────────────────
+async function login() {
+  const dni      = document.getElementById('dniLogin').value.trim();
+  const password = document.getElementById('password').value.trim();
+  const status   = document.getElementById('loginStatus');
+  const btn      = document.getElementById('btnLogin');
+  clearStatus(status);
+
+  if (!dni || !password) return setStatus(status, 'Ingresá tu DNI y contraseña.', 'warn');
+  if (!validarDNI(dni))  return setStatus(status, 'El DNI debe tener 7 u 8 dígitos numéricos.', 'warn');
+
+  setLoading(btn, true, 'Ingresando...');
+  try {
+    const res  = await fetch(API + '/docente/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dni, password }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      localStorage.setItem('docente_auth', '1');
+      localStorage.setItem('docente_data', JSON.stringify(data.docente));
+      mostrarMenu(data.docente);
+    } else {
+      setStatus(status, data.error || 'DNI o contraseña incorrectos.', 'error');
+    }
+  } catch {
+    setStatus(status, 'No se pudo conectar con el servidor.', 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+// ── Registro ──────────────────────────────────────────────────────
+async function registrar() {
+  const apellido = document.getElementById('regApellido').value.trim();
+  const nombre   = document.getElementById('regNombre').value.trim();
+  const dni      = document.getElementById('regDni').value.trim();
+  const email    = document.getElementById('regEmail').value.trim();
+  const status   = document.getElementById('registroStatus');
+  const btn      = document.getElementById('btnRegistro');
+
+  clearStatus(status);
+
+  // Recolectar materias seleccionadas
+  const materiasSeleccionadas = [...document.querySelectorAll('[class^="mat-check-"]:checked')]
+    .map(el => parseInt(el.value));
+
+  if (!apellido || !nombre || !dni) return setStatus(status, 'Completá apellido, nombre y DNI.', 'warn');
+  if (!validarDNI(dni))             return setStatus(status, 'El DNI debe tener 7 u 8 dígitos numéricos.', 'warn');
+  if (email && !validarEmail(email)) return setStatus(status, 'El correo no tiene un formato válido.', 'warn');
+  if (!materiasSeleccionadas.length) return setStatus(status, 'Seleccioná al menos una materia.', 'warn');
+
+  setLoading(btn, true, 'Creando cuenta...');
+  try {
+    const res  = await fetch(API + '/docente/registro', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apellido, nombre, dni, email: email || null, materias: materiasSeleccionadas }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      localStorage.setItem('docente_auth', '1');
+      localStorage.setItem('docente_data', JSON.stringify(data.docente));
+      mostrarMenu(data.docente);
+    } else {
+      setStatus(status, data.error || 'No se pudo crear la cuenta.', 'error');
+    }
+  } catch {
+    setStatus(status, 'No se pudo conectar con el servidor.', 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+// ── Menú ──────────────────────────────────────────────────────────
+async function mostrarMenu(docente) {
+  document.getElementById('pantallaLogin').style.display    = 'none';
+  document.getElementById('pantallaRegistro').style.display = 'none';
+  document.getElementById('menuDocente').style.display      = 'block';
+  document.getElementById('saludoDocente').textContent = `Hola, Prof. ${esc(docente.nombre)} ${esc(docente.apellido)}`;
+  document.getElementById('saludoSub').textContent     = `DNI: ${esc(docente.dni || '')}`;
+  document.getElementById('headerNav').innerHTML = `
+    <span class="text-sm text-muted">Prof. ${esc(docente.apellido)}, ${esc(docente.nombre)}</span>
+    <button class="btn btn-secondary" onclick="abrirCambiarPassword()">Cambiar contraseña</button>
+    <button class="btn btn-secondary" onclick="cerrarSesion()">Salir</button>
+    <a class="btn btn-secondary" href="/inicio/">Menú</a>
+  `;
+  await cargarResumen(docente.id_docente);
+  await renderAbm(docente.id_docente);
+}
+
+async function cargarResumen(idDocente) {
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(API + '/docente/materias?id_docente=' + idDocente, { signal: AbortSignal.timeout(6000) }),
+      fetch(API + '/docente/mesas?id_docente='    + idDocente, { signal: AbortSignal.timeout(6000) })
+    ]);
+    const dataMat  = await r1.json();
+    const dataMesa = await r2.json();
+    const materias = dataMat.materias || [];
+    const mesas    = dataMesa.mesas   || [];
+
+    if (materias.length > 0) {
+      const b = document.getElementById('badgeCursadas');
+      b.textContent   = materias.length + ' materia' + (materias.length > 1 ? 's' : '');
+      b.style.display = 'inline-flex';
+    }
+
+    const mesasActivas = mesas.filter(m => m.activa);
+    if (mesasActivas.length > 0) {
+      const b = document.getElementById('badgeFinales');
+      b.textContent   = mesasActivas.length + ' mesa' + (mesasActivas.length > 1 ? 's' : '') + ' activa' + (mesasActivas.length > 1 ? 's' : '');
+      b.style.display = 'inline-flex';
+    }
+
+    if (materias.length > 0) {
+      const porCarrera = {};
+      materias.forEach(m => {
+        if (!porCarrera[m.nombre_carrera]) porCarrera[m.nombre_carrera] = [];
+        porCarrera[m.nombre_carrera].push(m);
+      });
+      document.getElementById('materiasLista').innerHTML = Object.entries(porCarrera).map(([carrera, mats]) => `
+        <div style="margin-bottom:14px">
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:8px">
+            ${esc(carrera)}
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            ${mats.map(m => `
+              <span class="pill" style="background:var(--primary-light);color:var(--primary)">
+                ${esc(m.nombre_materia)}
+                <span style="font-weight:400;color:var(--text-3)">
+                  · ${m.formato === 'cuatrimestral' ? m.cuatrimestre + '° cuatrim.' : 'Anual'}
+                </span>
+              </span>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+      document.getElementById('materiasResumen').style.display = 'block';
+    }
+  } catch { /* silencioso */ }
+}
+
+// ── ABM de materias ──────────────────────────────────────────────
+async function renderAbm(idDocente) {
+  const card = document.getElementById('cardAbm');
+  const cont = document.getElementById('abmContenido');
+  card.style.display = 'block';
+  cont.innerHTML = '<div class="text-sm text-muted">Cargando...</div>';
+
+  try {
+    const res  = await fetch(API + '/docente/materias?id_docente=' + idDocente, { signal: AbortSignal.timeout(6000) });
+    const data = await res.json();
+    const materias = data.materias || [];
+
+    if (!materias.length) {
+      cont.innerHTML = '<div class="empty-state" style="padding:24px"><div class="empty-state-icon">📚</div><p>No tenés materias asignadas todavía.</p></div>';
+      return;
+    }
+
+    // Agrupar por carrera
+    const porCarrera = {};
+    materias.forEach(m => {
+      if (!porCarrera[m.nombre_carrera]) porCarrera[m.nombre_carrera] = [];
+      porCarrera[m.nombre_carrera].push(m);
+    });
+
+    cont.innerHTML = Object.entries(porCarrera).map(([carrera, mats]) => `
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)">
+          📚 ${esc(carrera)}
+        </div>
+        <div class="grid" style="gap:8px">
+          ${mats.map(m => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);gap:12px">
+              <div>
+                <div style="font-weight:600;font-size:14px">${esc(m.nombre_materia)}</div>
+                <div class="text-sm text-muted">
+                  ${esc(m.codigo_materia || '')} · ${m.formato === 'anual' ? 'Anual' : m.cuatrimestre + '° cuatrim.'} · ${m.anio_plan}° año
+                </div>
+              </div>
+              <button class="btn btn-bad" style="padding:5px 12px;font-size:12px;flex-shrink:0"
+                onclick="bajaMateria(${m.id_materia}, '${esc(m.nombre_materia)}')">
+                Dar de baja
+              </button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+  } catch {
+    cont.innerHTML = '<div class="alert alert-error"><span>✕</span><span>Error al cargar materias.</span></div>';
+  }
+}
+
+async function bajaMateria(idMateria, nombreMateria) {
+  const docente = JSON.parse(localStorage.getItem('docente_data') || '{}');
+  const ok = await confirmar({
+    titulo:  'Dar de baja materia',
+    mensaje: `¿Confirmás que querés darte de baja de "${nombreMateria}"?`,
+    btnOk:   'Sí, dar de baja',
+    tipo:    'warn'
+  });
+  if (!ok) return;
+
+  try {
+    const res  = await fetch(API + '/docente/materias/baja', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_docente: docente.id_docente, id_materia: idMateria }),
+      signal: AbortSignal.timeout(6000)
+    });
+    const data = await res.json();
+    if (data.ok) await renderAbm(docente.id_docente);
+    else alert(data.error || 'Error al dar de baja.');
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+
+async function abrirAgregarMateria() {
+  const overlay = document.getElementById('modalAgregarMateria');
+  const selCarrera = document.getElementById('abmCarrera');
+  clearStatus(document.getElementById('abmStatus'));
+  // Cargar carreras
+  try {
+    const res  = await fetch(API + '/carreras', { signal: AbortSignal.timeout(6000) });
+    const data = await res.json();
+    selCarrera.innerHTML = '<option value="">Seleccioná un profesorado</option>';
+    data.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.id_carrera; o.textContent = c.nombre_carrera;
+      selCarrera.appendChild(o);
+    });
+  } catch { /* silencioso */ }
+  overlay.classList.remove('hidden');
+}
+
+async function cargarMateriasAbm() {
+  const idCarrera = document.getElementById('abmCarrera').value;
+  const sel = document.getElementById('abmMateria');
+  const docente = JSON.parse(localStorage.getItem('docente_data') || '{}');
+  if (!idCarrera) { sel.innerHTML = '<option value="">Primero seleccioná el profesorado</option>'; return; }
+
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(API + '/materias?id_carrera=' + idCarrera, { signal: AbortSignal.timeout(6000) }),
+      fetch(API + '/docente/materias?id_docente=' + docente.id_docente, { signal: AbortSignal.timeout(6000) })
+    ]);
+    const todasMaterias  = await r1.json();
+    const misM = await r2.json();
+    const misIds = new Set((misM.materias || []).map(m => m.id_materia));
+
+    // Mostrar solo las que NO tiene asignadas
+    const disponibles = todasMaterias.filter(m => !misIds.has(m.id_materia));
+
+    sel.innerHTML = '<option value="">Seleccioná una materia</option>';
+    if (!disponibles.length) {
+      sel.innerHTML = '<option value="">Ya tenés todas las materias de este profesorado</option>';
+      return;
+    }
+
+    // Agrupar por año
+    const porAnio = {};
+    disponibles.forEach(m => {
+      if (!porAnio[m.anio_plan]) porAnio[m.anio_plan] = [];
+      porAnio[m.anio_plan].push(m);
+    });
+
+    Object.entries(porAnio).forEach(([anio, mats]) => {
+      const group = document.createElement('optgroup');
+      group.label = anio + '° año';
+      mats.forEach(m => {
+        const o = document.createElement('option');
+        o.value = String(m.id_materia);
+        o.textContent = m.nombre_materia + ' (' + (m.formato === 'anual' ? 'Anual' : m.cuatrimestre + '° cuatrim.') + ')';
+        group.appendChild(o);
+      });
+      sel.appendChild(group);
+    });
+  } catch { /* silencioso */ }
+}
+
+async function agregarMateria() {
+  const idMateria = parseInt(document.getElementById('abmMateria').value) || 0;
+  const status    = document.getElementById('abmStatus');
+  const docente   = JSON.parse(localStorage.getItem('docente_data') || '{}');
+  clearStatus(status);
+
+  if (!idMateria) return setStatus(status, 'Seleccioná una materia.', 'warn');
+
+  const btn = document.getElementById('btnAgregarMateria');
+  setLoading(btn, true, 'Agregando...');
+  try {
+    const res  = await fetch(API + '/docente/materias/alta', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_docente: docente.id_docente, id_materia: idMateria }),
+      signal: AbortSignal.timeout(6000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      cerrarAgregarMateria();
+      await renderAbm(docente.id_docente);
+      await cargarResumen(docente.id_docente);
+    } else {
+      setStatus(status, data.error || 'Error al agregar.', 'error');
+    }
+  } catch {
+    setStatus(status, 'No se pudo conectar.', 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+function cerrarAgregarMateria() {
+  document.getElementById('modalAgregarMateria').classList.add('hidden');
+  document.getElementById('abmMateria').innerHTML = '<option value="">Primero seleccioná el profesorado</option>';
+  document.getElementById('abmCarrera').value = '';
+}
+
+function cerrarSesion() {
+  localStorage.removeItem('docente_auth');
+  localStorage.removeItem('docente_data');
+  window.location.reload();
+}
+</script>
+</body>
+</html>

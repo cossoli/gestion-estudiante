@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ingresantes — Secretaría IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Secretaría — Ingresantes</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <a class="btn btn-secondary" href="/secretaria/">← Panel Secretaría</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <!-- Verificación de sesión -->
+  <div class="card card-sm" id="sinSesion" style="display:none">
+    <div class="alert alert-warn">
+      <span>⚠</span><span>Sesión no iniciada. <a href="/secretaria/" style="color:var(--warn);font-weight:700">Ingresá desde el panel de Secretaría.</a></span>
+    </div>
+  </div>
+
+  <div id="panelContent" style="display:none">
+    <div class="page-hero">
+      <h1>Ingresantes</h1>
+      <p>Revisá y gestioná las inscripciones de los nuevos estudiantes.</p>
+    </div>
+
+    <div class="grid grid-2" style="gap:16px;margin-bottom:20px" id="statsRow"></div>
+
+    <div class="card">
+      <div class="filter-bar">
+        <input type="search" id="busqueda" placeholder="Buscar por nombre, DNI o carrera..." oninput="filtrar()">
+        <select id="filtroEstado" onchange="filtrar()" style="max-width:220px">
+          <option value="">Todos los estados</option>
+          <option value="pendiente_secretaria">Pendientes</option>
+          <option value="observado_secretaria">Observados</option>
+          <option value="aprobado_secretaria">Aprobados</option>
+          <option value="rechazado_secretaria">Rechazados</option>
+          <option value="cargado_plataforma">En plataforma</option>
+        </select>
+        <button class="btn btn-secondary" onclick="cargar()">⟳ Actualizar</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Estudiante</th>
+              <th>DNI</th>
+              <th>Carrera</th>
+              <th>Año</th>
+              <th>Estado</th>
+              <th>Documentos</th>
+              <th>Observaciones</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div id="emptyState" class="empty-state" style="display:none">
+          <div class="empty-state-icon">📋</div>
+          <p>No hay estudiantes con ese criterio.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Modal confirmación -->
+<div class="modal-overlay hidden" id="modalConfirm">
+  <div class="modal">
+    <h3 class="modal-title" id="modalConfirmTitle">¿Confirmar acción?</h3>
+    <p class="modal-body text-sm text-muted" id="modalConfirmMsg"></p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modalConfirmCancel">Cancelar</button>
+      <button class="btn btn-primary" id="modalConfirmOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal observaciones -->
+<div class="modal-overlay hidden" id="modalObs">
+  <div class="modal">
+    <h3 class="modal-title" id="modalObsTitle">Observaciones</h3>
+    <div class="modal-body">
+      <div class="field">
+        <label class="field-label">Mensaje para el estudiante</label>
+        <textarea id="modalObsText" rows="5" style="resize:vertical;width:100%"
+                  placeholder="Describí qué debe corregir o el motivo del rechazo..."></textarea>
+        <span class="text-sm text-muted">Este texto se guardará como observación y se usará para el correo.</span>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <button class="btn btn-secondary" id="modalObsCancel">Cancelar</button>
+      <div class="actions" style="gap:8px">
+        <button class="btn btn-secondary" id="modalObsSinCorreo">Guardar sin correo</button>
+        <button class="btn btn-primary" id="modalObsOk">Guardar y enviar correo ✉</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal correo -->
+<div class="modal-overlay hidden" id="modalCorreo">
+  <div class="modal" style="max-width:560px">
+    <h3 class="modal-title">Correo listo para enviar</h3>
+    <p class="text-sm text-muted" style="margin-bottom:16px">Revisá el contenido antes de enviarlo.</p>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;font-size:13px;line-height:1.7">
+      <div><strong>Para:</strong> <span id="correoDestinatario" style="color:var(--primary)"></span></div>
+      <div><strong>Asunto:</strong> <span id="correoAsunto"></span></div>
+      <div style="margin-top:10px;white-space:pre-wrap" id="correoCuerpo"></div>
+    </div>
+    <div class="modal-footer" style="margin-top:20px">
+      <button class="btn btn-secondary" id="modalCorreoCerrar">Cerrar</button>
+      <a class="btn btn-primary" id="modalCorreoLink" href="#" target="_blank">Abrir correo ✉</a>
+    </div>
+  </div>
+</div>
+
+<!-- Modal ficha estudiante -->
+<div class="modal-overlay hidden" id="modalFicha">
+  <div class="modal" style="max-width:620px;padding:0;overflow:hidden">
+    <!-- Header del modal -->
+    <div style="background:linear-gradient(135deg,#1a3fa8,#2e7d32);padding:24px 28px;color:#fff">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:14px">
+          <div style="width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700" id="fichaAvatar"></div>
+          <div>
+            <div style="font-size:18px;font-weight:700" id="fichaNombre"></div>
+            <div style="font-size:13px;opacity:.85" id="fichaCarrera"></div>
+          </div>
+        </div>
+        <button onclick="cerrarFicha()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">×</button>
+      </div>
+      <div style="margin-top:14px" id="fichaEstadoPill"></div>
+    </div>
+    <!-- Cuerpo -->
+    <div style="padding:24px 28px;max-height:65vh;overflow-y:auto" id="fichaCuerpo"></div>
+    <!-- Footer -->
+    <div style="padding:16px 28px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px" id="fichaFooter"></div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+<script>
+let todosLosInscriptos = [];
+
+// Verificar sesión
+if (!sessionStorage.getItem('sec_auth')) {
+  document.getElementById('sinSesion').style.display    = 'block';
+} else {
+  document.getElementById('panelContent').style.display = 'block';
+  cargar();
+}
+
+async function cargar() {
+  try {
+    const res = await fetch(API + '/secretaria/inscriptos', { signal: AbortSignal.timeout(8000) });
+    todosLosInscriptos = await res.json();
+    renderStats();
+    filtrar();
+  } catch {
+    document.getElementById('tbody').innerHTML = `<tr><td colspan="8" class="text-center text-muted">Error al cargar datos.</td></tr>`;
+  }
+}
+
+function renderStats() {
+  const c = { pendiente: 0, observado: 0, aprobado: 0, cargado: 0 };
+  todosLosInscriptos.forEach(r => {
+    if      (r.estado_general === 'pendiente_secretaria') c.pendiente++;
+    else if (r.estado_general === 'observado_secretaria') c.observado++;
+    else if (r.estado_general === 'aprobado_secretaria')  c.aprobado++;
+    else if (r.estado_general === 'cargado_plataforma')   c.cargado++;
+  });
+  document.getElementById('statsRow').innerHTML = `
+    <div class="card" style="margin:0;background:var(--warn-bg);border-color:#f5dcb0">
+      <div style="font-size:28px;font-weight:700;color:var(--warn)">${c.pendiente}</div>
+      <div class="text-sm text-muted">Pendientes de revisión</div>
+    </div>
+    <div class="card" style="margin:0;background:var(--ok-bg);border-color:#b6e2cf">
+      <div style="font-size:28px;font-weight:700;color:var(--ok)">${c.aprobado + c.cargado}</div>
+      <div class="text-sm text-muted">Aprobados</div>
+    </div>
+  `;
+}
+
+function filtrar() {
+  const busq   = document.getElementById('busqueda').value.toLowerCase();
+  const estado = document.getElementById('filtroEstado').value;
+  const datos  = todosLosInscriptos.filter(r => {
+    const texto = `${r.apellido} ${r.nombre} ${r.dni} ${r.nombre_carrera}`.toLowerCase();
+    return (!busq || texto.includes(busq)) && (!estado || r.estado_general === estado);
+  });
+  renderTabla(datos);
+}
+
+function renderTabla(datos) {
+  const tb    = document.getElementById('tbody');
+  const empty = document.getElementById('emptyState');
+  if (!datos.length) { tb.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  tb.innerHTML = datos.map(r => {
+    const docs = [
+      r.pdf_dni             ? `<a href="${esc(API+'/'+r.pdf_dni)}" target="_blank" class="btn btn-secondary" style="padding:4px 10px;font-size:12px">DNI</a>` : '',
+      r.pdf_titulo_secundario ? `<a href="${esc(API+'/'+r.pdf_titulo_secundario)}" target="_blank" class="btn btn-secondary" style="padding:4px 10px;font-size:12px">Título</a>` : ''
+    ].filter(Boolean).join(' ');
+
+    const esPendiente = ['pendiente_secretaria','observado_secretaria'].includes(r.estado_general);
+    const tieneCorreo = r.correo && r.correo.trim() !== '';
+
+    const btnCorreo = (!esPendiente && ['observado_secretaria','rechazado_secretaria'].includes(r.estado_general) && tieneCorreo)
+      ? `<button class="btn btn-secondary" style="padding:6px 12px;font-size:13px"
+           onclick="abrirCorreo('${esc(r.correo)}','${esc(r.apellido)} ${esc(r.nombre)}','${esc(r.estado_general)}',\`${esc(r.observaciones_secretaria||'')}\`)">
+           ✉ Correo
+         </button>` : '';
+
+    const acciones = esPendiente ? `
+      <div class="actions" style="flex-direction:column;align-items:stretch;gap:6px">
+        <button class="btn btn-ok"   style="padding:6px 12px;font-size:13px" onclick="accion(${r.id_estudiante},'aprobar','${esc(r.apellido)} ${esc(r.nombre)}','${esc(r.correo||'')}')">✓ Aprobar</button>
+        <button class="btn btn-warn" style="padding:6px 12px;font-size:13px" onclick="accion(${r.id_estudiante},'observar','${esc(r.apellido)} ${esc(r.nombre)}','${esc(r.correo||'')}')">⚠ Observar</button>
+        <button class="btn btn-bad"  style="padding:6px 12px;font-size:13px" onclick="accion(${r.id_estudiante},'rechazar','${esc(r.apellido)} ${esc(r.nombre)}','${esc(r.correo||'')}')">✕ Rechazar</button>
+      </div>
+    ` : `<div class="actions">${btnCorreo || '<span class="text-sm text-muted">—</span>'}</div>`;
+
+    return `
+      <tr>
+        <td>
+          <div class="td-name" style="cursor:pointer;color:var(--primary)" onclick='abrirFicha(${JSON.stringify(r).replace(/'/g, "&#39;")})'>
+            ${esc(r.apellido)}, ${esc(r.nombre)}
+          </div>
+          <div class="td-sub">${r.correo ? esc(r.correo) : '<span style="color:var(--warn)">Sin correo</span>'}</div>
+        </td>
+        <td>${esc(r.dni)}</td>
+        <td>
+          ${r.carreras && r.carreras.length > 1
+            ? r.carreras.map(c => `<div class="text-sm">${esc(c.nombre_carrera)} <span class="text-muted">(${c.anio_actual}°)</span></div>`).join('')
+            : esc(r.nombre_carrera)}
+        </td>
+        <td>${r.carreras && r.carreras.length > 1 ? '—' : esc(r.anio_actual) + '°'}</td>
+        <td>${estadoPill(r.estado_general)}</td>
+        <td><div class="actions">${docs || '<span class="text-sm text-muted">Sin docs</span>'}</div></td>
+        <td><div class="text-sm" style="max-width:180px">${esc(r.observaciones_secretaria)||'<span class="text-muted">—</span>'}</div></td>
+        <td>${acciones}</td>
+      </tr>`;
+  }).join('');
+}
+
+async function accion(id, tipo, nombre, correo) {
+  let observaciones = '';
+  let enviarCorreo  = false;
+
+  if (tipo === 'aprobar') {
+    const ok = await confirmar({
+      titulo:  'Aprobar inscripción',
+      mensaje: `¿Confirmás la aprobación de ${nombre}? Pasará a la cola de TIC para carga en plataforma.`,
+      btnOk:   'Sí, aprobar', tipo: 'ok'
+    });
+    if (!ok) return;
+  } else {
+    const resultado = await pedirObservacionesConCorreo({
+      titulo:      `${tipo === 'observar' ? 'Observar' : 'Rechazar'} — ${nombre}`,
+      placeholder: tipo === 'observar' ? 'Describí qué debe corregir...' : 'Indicá el motivo del rechazo...',
+      tieneCorreo: !!correo
+    });
+    if (resultado === null) return;
+    observaciones = resultado.texto;
+    enviarCorreo  = resultado.conCorreo;
+  }
+
+  try {
+    const res  = await fetch(API + '/secretaria/accion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_estudiante: id, accion: tipo, observaciones }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      await cargar();
+      if (enviarCorreo && correo) {
+        abrirCorreo(correo, nombre, tipo === 'observar' ? 'observado_secretaria' : 'rechazado_secretaria', observaciones);
+      }
+    } else {
+      alert(data.error || 'Error al realizar la acción.');
+    }
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+
+function pedirObservacionesConCorreo({ titulo, placeholder, tieneCorreo }) {
+  return new Promise(resolve => {
+    const overlay   = document.getElementById('modalObs');
+    const titleEl   = document.getElementById('modalObsTitle');
+    const textarea  = document.getElementById('modalObsText');
+    const btnOk     = document.getElementById('modalObsOk');
+    const btnSin    = document.getElementById('modalObsSinCorreo');
+    const btnCancel = document.getElementById('modalObsCancel');
+    titleEl.textContent  = titulo;
+    textarea.placeholder = placeholder;
+    textarea.value       = '';
+    btnOk.style.display  = tieneCorreo ? '' : 'none';
+    overlay.classList.remove('hidden');
+    const close = val => {
+      overlay.classList.add('hidden');
+      btnOk.removeEventListener('click', onOk);
+      btnSin.removeEventListener('click', onSin);
+      btnCancel.removeEventListener('click', onCancel);
+      resolve(val);
+    };
+    const onOk     = () => close({ texto: textarea.value.trim(), conCorreo: true });
+    const onSin    = () => close({ texto: textarea.value.trim(), conCorreo: false });
+    const onCancel = () => close(null);
+    btnOk.addEventListener('click', onOk);
+    btnSin.addEventListener('click', onSin);
+    btnCancel.addEventListener('click', onCancel);
+  });
+}
+
+function abrirCorreo(correo, nombre, estado, observaciones) {
+  const esObs  = estado === 'observado_secretaria';
+  const asunto = esObs ? 'IFDC Río Colorado — Observaciones en tu inscripción' : 'IFDC Río Colorado — Estado de tu inscripción';
+  const cuerpo = esObs
+    ? `Estimado/a ${nombre}:\n\nTu inscripción fue revisada y presenta las siguientes observaciones:\n\n${observaciones||'(sin observaciones)'}\n\nIngresá al sistema con tu DNI, corregí los datos y volvé a enviar.\n\nSaludos,\nSecretaría — IFDC Río Colorado`
+    : `Estimado/a ${nombre}:\n\nTu inscripción no pudo ser aprobada por el siguiente motivo:\n\n${observaciones||'(sin observaciones)'}\n\nPara más información, comunicate con Secretaría.\n\nSaludos,\nSecretaría — IFDC Río Colorado`;
+  document.getElementById('correoDestinatario').textContent = correo;
+  document.getElementById('correoAsunto').textContent       = asunto;
+  document.getElementById('correoCuerpo').textContent       = cuerpo;
+  document.getElementById('modalCorreoLink').href = `mailto:${encodeURIComponent(correo)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+  const overlay = document.getElementById('modalCorreo');
+  overlay.classList.remove('hidden');
+  document.getElementById('modalCorreoCerrar').onclick = () => overlay.classList.add('hidden');
+}
+
+function abrirFicha(r) {
+  // Header
+  document.getElementById('fichaAvatar').textContent  = r.apellido ? r.apellido[0].toUpperCase() : '?';
+  document.getElementById('fichaNombre').textContent  = r.apellido + ', ' + r.nombre;
+  const carreras = r.carreras && r.carreras.length
+    ? r.carreras.map(c => c.nombre_carrera).join(' · ')
+    : (r.nombre_carrera || '—');
+  document.getElementById('fichaCarrera').textContent = carreras;
+  document.getElementById('fichaEstadoPill').innerHTML = estadoPill(r.estado_general);
+
+  // Cuerpo
+  const fila = (label, valor) => `
+    <div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="min-width:160px;font-size:13px;color:var(--text-3);font-weight:500">${label}</span>
+      <span style="font-size:14px;color:var(--text-1);font-weight:500">${valor || '<span style="color:var(--text-3)">—</span>'}</span>
+    </div>`;
+
+  const fechaNac = r.fecha_nacimiento
+    ? new Date(r.fecha_nacimiento).toLocaleDateString('es-AR')
+    : null;
+
+  const carrerasHtml = r.carreras && r.carreras.length
+    ? r.carreras.map(c => `${esc(c.nombre_carrera)} <span style="color:var(--text-3)">(${c.anio_actual}° año)</span>`).join('<br>')
+    : esc(r.nombre_carrera || '—');
+
+  const docsHtml = [
+    r.pdf_dni ? `<a href="${esc(API+'/'+r.pdf_dni)}" target="_blank" class="btn btn-secondary" style="padding:5px 12px;font-size:13px">📄 Ver DNI</a>` : '<span style="color:var(--text-3);font-size:13px">Sin DNI</span>',
+    r.pdf_titulo_secundario ? `<a href="${esc(API+'/'+r.pdf_titulo_secundario)}" target="_blank" class="btn btn-secondary" style="padding:5px 12px;font-size:13px">📄 Ver Título</a>` : '<span style="color:var(--text-3);font-size:13px">Sin título</span>'
+  ].join('&nbsp;&nbsp;');
+
+  document.getElementById('fichaCuerpo').innerHTML = `
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:4px">Datos personales</div>
+      ${fila('DNI', esc(r.dni))}
+      ${fila('Correo', r.correo ? `<a href="mailto:${esc(r.correo)}" style="color:var(--primary)">${esc(r.correo)}</a>` : null)}
+      ${fila('Teléfono', esc(r.telefono))}
+      ${fila('Fecha de nacimiento', fechaNac)}
+      ${fila('Domicilio', esc(r.domicilio))}
+      ${fila('Localidad', esc(r.localidad))}
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:4px">Carrera/s</div>
+      ${fila('Profesorado/s', carrerasHtml)}
+      ${fila('Año de cohorte', esc(r.anio_cohorte ? String(r.anio_cohorte) : null))}
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:8px">Documentación</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">${docsHtml}</div>
+    </div>
+    ${r.observaciones_secretaria ? `
+    <div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:4px">Observaciones</div>
+      <div style="background:var(--warn-bg);border:1px solid #f5dcb0;border-radius:var(--radius-sm);padding:12px;font-size:13px">${esc(r.observaciones_secretaria)}</div>
+    </div>` : ''}
+  `;
+
+  // Footer con acciones
+  const esPendiente = ['pendiente_secretaria','observado_secretaria'].includes(r.estado_general);
+  document.getElementById('fichaFooter').innerHTML = esPendiente ? `
+    <button class="btn btn-secondary" onclick="cerrarFicha()">Cerrar</button>
+    <button class="btn btn-warn" style="font-size:13px" onclick="cerrarFicha();accion(${r.id_estudiante},'observar','${esc(r.apellido)} ${esc(r.nombre)}','${esc(r.correo||'')}')">⚠ Observar</button>
+    <button class="btn btn-bad"  style="font-size:13px" onclick="cerrarFicha();accion(${r.id_estudiante},'rechazar','${esc(r.apellido)} ${esc(r.nombre)}','${esc(r.correo||'')}')">✕ Rechazar</button>
+    <button class="btn btn-ok"   style="font-size:13px" onclick="cerrarFicha();accion(${r.id_estudiante},'aprobar','${esc(r.apellido)} ${esc(r.nombre)}','${esc(r.correo||'')}')">✓ Aprobar</button>
+  ` : `<button class="btn btn-secondary" onclick="cerrarFicha()">Cerrar</button>`;
+
+  document.getElementById('modalFicha').classList.remove('hidden');
+}
+
+function cerrarFicha() {
+  document.getElementById('modalFicha').classList.add('hidden');
+}
+</script>
+</body>
+</html>

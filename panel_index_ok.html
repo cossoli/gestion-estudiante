@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi panel — IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    /* Pestañas de carreras */
+    .tabs {
+      display: flex; gap: 4px; flex-wrap: wrap;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .tab-btn {
+      padding: 10px 18px; font-size: 14px; font-weight: 600;
+      border: none; background: none; cursor: pointer;
+      color: var(--text-3); border-bottom: 3px solid transparent;
+      margin-bottom: -2px; transition: color .15s, border-color .15s;
+      font-family: inherit;
+    }
+    .tab-btn:hover { color: var(--primary); }
+    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Materias */
+    .materia-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      display: flex; align-items: center;
+      justify-content: space-between; gap: 12px;
+      transition: box-shadow .15s;
+    }
+    .materia-card:hover { box-shadow: var(--shadow-sm); }
+    .materia-card.apto     { border-color: #b6e2cf; }
+    .materia-card.pendiente{ border-color: #f5dcb0; }
+    .materia-card.no-apto  { border-color: #f5c2c2; }
+    .materia-card.aprobado  { border-color: #a8d8f0; }
+    .fila-aprobado    td { background: #e8f4fb; }
+    .fila-promocion   td { background: #e8f4fb; }
+    .fila-desaprobado td { background: #fdeeee; }
+    .fila-abandono    td { background: #fdeeee; }
+
+    .materia-nombre { font-weight: 600; font-size: 14px; }
+    .materia-meta   { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+
+    .disponible-card {
+      background: var(--surface2);
+      border: 1.5px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      display: flex; align-items: center;
+      justify-content: space-between; gap: 12px;
+      transition: border-color .15s, background .15s;
+    }
+    .disponible-card:hover { border-color: var(--primary); background: var(--primary-light); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Sistema de Gestión Académica</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <span class="text-sm text-muted" id="headerNombre"></span>
+      <a class="btn btn-secondary" href="/inscripcion/">Mis datos</a>
+      <button class="btn btn-secondary" onclick="cerrarSesion()">Salir</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <div id="cargando" class="card card-sm text-center" style="padding:40px">
+    <div class="spinner" style="border-color:rgba(26,63,168,.2);border-top-color:var(--primary);width:28px;height:28px;margin:0 auto 12px"></div>
+    <p class="text-sm text-muted">Cargando tu panel...</p>
+  </div>
+
+  <div id="contenido" style="display:none">
+
+    <div class="page-hero">
+      <h1 id="saludoNombre">Bienvenido/a</h1>
+      <p id="saludoSub" class="text-muted"></p>
+    </div>
+
+    <!-- Estado general de inscripción -->
+    <div class="card" id="cardEstado">
+      <h3 class="card-title" style="margin-bottom:12px">Estado de tu inscripción</h3>
+      <div id="estadoContent"></div>
+      <div id="obsSecretaria" style="display:none;margin-top:12px"></div>
+    </div>
+
+    <!-- Pestañas principales: Materias / Exámenes finales -->
+    <div id="cardMaterias" style="display:none">
+
+      <!-- Nav pestañas principales -->
+      <div class="tabs" style="margin-bottom:0">
+        <button class="tab-btn active" id="nav-materias" onclick="cambiarSeccion('materias')">
+          📚 Mis materias
+        </button>
+        <button class="tab-btn" id="nav-finales" onclick="cambiarSeccion('finales')">
+          📝 Exámenes finales
+          <span id="badgeFinales" style="display:none;background:var(--bad);color:#fff;border-radius:999px;font-size:11px;padding:1px 7px;margin-left:6px"></span>
+        </button>
+        <button class="tab-btn" id="nav-historial" onclick="cambiarSeccion('historial')">
+          📋 Historial académico
+        </button>
+      </div>
+
+      <!-- Sección: Mis materias -->
+      <div id="seccionMaterias" class="card" style="border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+          <h3 class="card-title" style="margin:0">Mis materias <span id="anioLectivo" class="text-sm text-muted"></span></h3>
+        </div>
+        <div class="tabs" id="tabsCarreras"></div>
+        <div id="tabsContenido"></div>
+      </div>
+
+      <!-- Sección: Exámenes finales -->
+      <div id="seccionFinales" class="card" style="display:none;border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
+        <h3 class="card-title" style="margin-bottom:6px">Exámenes finales</h3>
+        <p class="text-sm text-muted" style="margin-bottom:16px">Mesas abiertas para inscripción. Solo podés anotarte a materias que tenés aprobada la cursada.</p>
+        <div id="mesasContenido"></div>
+      </div>
+
+      <!-- Sección: Historial académico -->
+      <div id="seccionHistorial" class="card" style="display:none;border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
+        <h3 class="card-title" style="margin-bottom:16px">Historial académico</h3>
+        <div id="historialContenido">
+          <div class="text-sm text-muted text-center" style="padding:20px">Cargando historial...</div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</main>
+
+<!-- Modal: inscribirse a una materia -->
+<div class="modal-overlay hidden" id="modalInscripcion">
+  <div class="modal" style="max-width:540px">
+    <h3 class="modal-title" id="modalInscripcionTitulo">Anotarme a una materia</h3>
+    <p class="text-sm text-muted" style="margin-bottom:16px">
+      Secretaría verificará si estás en condiciones de cursarla.
+    </p>
+    <div id="materiasDisponibles" style="max-height:320px;overflow-y:auto;display:grid;gap:8px"></div>
+    <div id="sinDisponibles" class="empty-state" style="display:none;padding:24px">
+      <div class="empty-state-icon">✓</div>
+      <p>Ya estás inscripto a todas las materias disponibles.</p>
+    </div>
+    <div class="modal-footer" style="margin-top:16px">
+      <button class="btn btn-secondary" onclick="cerrarModalInscripcion()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal confirmación -->
+<div class="modal-overlay hidden" id="modalConfirm">
+  <div class="modal">
+    <h3 class="modal-title" id="modalConfirmTitle">¿Confirmar?</h3>
+    <p class="modal-body text-sm text-muted" id="modalConfirmMsg"></p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modalConfirmCancel">Cancelar</button>
+      <button class="btn btn-primary" id="modalConfirmOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+<script>
+const dni = localStorage.getItem('estudiante_dni');
+if (!dni) window.location.replace('/acceso/');
+
+let alumnoData  = null;
+let carrerasData = [];
+let anioLectivo  = new Date().getFullYear();
+let carreraActiva = null;
+
+function cerrarSesion() {
+  localStorage.removeItem('estudiante_dni');
+  window.location.replace('/acceso/');
+}
+
+// ── Carga inicial ────────────────────────────────────────────────
+async function cargar() {
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(API + '/estudiante?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(8000) }),
+      fetch(API + '/alumno/materias?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(8000) })
+    ]);
+    const dataEst = await r1.json();
+    const dataMat = await r2.json();
+
+    document.getElementById('cargando').style.display  = 'none';
+    document.getElementById('contenido').style.display = 'block';
+
+    if (!dataEst.inscripto) {
+      window.location.replace('/inscripcion/');
+      return;
+    }
+
+    alumnoData   = dataEst.data;
+    carrerasData = dataEst.carreras || [];
+
+    // Si no hay carreras en estudiante_carreras, usar la carrera principal
+    if (!carrerasData.length && alumnoData.id_carrera) {
+      carrerasData = [{
+        id_carrera: alumnoData.id_carrera,
+        nombre_carrera: alumnoData.nombre_carrera,
+        anio_actual: alumnoData.anio_actual,
+        anio_cohorte: alumnoData.anio_cohorte
+      }];
+    }
+
+    renderHeader();
+    renderEstado();
+    renderTabs(dataMat.porCarrera || {});
+
+  } catch {
+    document.getElementById('cargando').innerHTML = `
+      <div class="alert alert-error"><span>✕</span><span>No se pudo cargar tu panel. Recargá la página.</span></div>`;
+  }
+}
+
+function renderHeader() {
+  const a = alumnoData;
+  document.getElementById('headerNombre').textContent  = `${a.apellido}, ${a.nombre}`;
+  document.getElementById('saludoNombre').textContent  = `Hola, ${a.nombre.split(' ')[0]}`;
+  const carreras = carrerasData.map(c => c.nombre_carrera).join(' · ');
+  document.getElementById('saludoSub').textContent     = carreras;
+  document.getElementById('anioLectivo').textContent   = `· ${anioLectivo}`;
+}
+
+function renderEstado() {
+  const estado = alumnoData.estado_general;
+  const msgs = {
+    pendiente_secretaria: ['info',  '⏳ Tu inscripción está siendo revisada por Secretaría.'],
+    observado_secretaria: ['warn',  '📝 Secretaría realizó observaciones en tu inscripción.'],
+    rechazado_secretaria: ['error', '✕ Tu inscripción fue rechazada. Contactate con Secretaría.'],
+    aprobado_secretaria:  ['ok',    '✓ ¡Inscripción aprobada por Secretaría! Pendiente de carga en plataforma.'],
+    cargado_plataforma:   ['ok',    '✓ ¡Estás dado de alta en la plataforma institucional!'],
+  };
+  const [tipo, msg] = msgs[estado] || ['info', 'Estado: ' + estado];
+  document.getElementById('estadoContent').innerHTML =
+    `<div class="alert alert-${tipo}"><span>${iconFor(tipo)}</span><span>${msg}</span></div>`;
+
+  if (alumnoData.observaciones_secretaria) {
+    const obs = document.getElementById('obsSecretaria');
+    obs.innerHTML = `<div class="alert alert-warn"><span>📋</span>
+      <div><strong>Observaciones de Secretaría:</strong><br>${esc(alumnoData.observaciones_secretaria)}</div></div>`;
+    obs.style.display = 'block';
+  }
+}
+
+function renderTabs(porCarrera) {
+  const puedeVer = ['cargado_plataforma','aprobado_secretaria'].includes(alumnoData.estado_general);
+  if (!puedeVer || !carrerasData.length) return;
+
+  document.getElementById('cardMaterias').style.display = 'block';
+
+  const tabsEl   = document.getElementById('tabsCarreras');
+  const contEl   = document.getElementById('tabsContenido');
+
+  tabsEl.innerHTML  = '';
+  contEl.innerHTML  = '';
+
+  carrerasData.forEach((c, i) => {
+    // Tab button
+    const btn = document.createElement('button');
+    btn.className   = 'tab-btn' + (i === 0 ? ' active' : '');
+    btn.textContent = c.nombre_carrera;
+    btn.onclick     = () => activarTab(c.id_carrera);
+    btn.id          = `tab-btn-${c.id_carrera}`;
+    tabsEl.appendChild(btn);
+
+    // Tab panel
+    const panel = document.createElement('div');
+    panel.className = 'tab-panel' + (i === 0 ? ' active' : '');
+    panel.id        = `tab-panel-${c.id_carrera}`;
+
+    const materias = porCarrera[c.id_carrera] || [];
+
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <div>
+          <span class="text-sm text-muted">${c.anio_actual}° año · Cohorte ${c.anio_cohorte || '—'}</span>
+        </div>
+        <button class="btn btn-primary" style="padding:8px 16px;font-size:13px"
+          onclick="abrirInscripcion(${c.id_carrera}, '${esc(c.nombre_carrera)}')">
+          + Anotarme a una materia
+        </button>
+      </div>
+      ${renderMaterias(materias)}
+    `;
+
+    contEl.appendChild(panel);
+  });
+
+  if (carrerasData.length) carreraActiva = carrerasData[0].id_carrera;
+}
+
+function activarTab(idCarrera) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-btn-' + idCarrera)?.classList.add('active');
+  document.getElementById('tab-panel-' + idCarrera)?.classList.add('active');
+  carreraActiva = idCarrera;
+}
+
+function renderMaterias(materias) {
+  if (!materias.length) {
+    return `<div class="empty-state" style="padding:32px">
+      <div class="empty-state-icon">📚</div>
+      <p>No tenés materias inscriptas todavía. Hacé clic en "+ Anotarme" para solicitar materias.</p>
+    </div>`;
+  }
+
+  const pillEstado = {
+    habilitado: '<span class="pill pill-aprobado">En curso</span>',
+    pendiente:  '<span class="pill pill-pendiente">Pendiente verificación</span>',
+    observado:  '<span class="pill pill-observado">Observada</span>',
+    rechazado:  '<span class="pill pill-rechazado">No habilitada</span>',
+  };
+  const claseCard = {
+    habilitado: 'apto', pendiente: 'pendiente',
+    observado: 'pendiente', rechazado: 'no-apto',
+  };
+
+  const obsInternas = ['Alta inicial', 'Alta inicial — 1° cuatrimestre 1° año'];
+
+  const resultadoPill = {
+    aprobado:    '<span class="pill pill-aprobado">✓ Aprobado</span>',
+    desaprobado: '<span class="pill pill-rechazado">✕ Desaprobado</span>',
+    promocion:   '<span class="pill" style="background:#e8f5ff;color:#1a6fa8">★ Promoción</span>',
+    ausente:     '<span class="pill pill-pendiente">Ausente</span>',
+    abandono:    '<span class="pill pill-rechazado">Abandono</span>',
+  };
+
+  return `<div class="grid" style="gap:10px">` +
+    materias.map(m => {
+      const obsVisible = m.observaciones && !obsInternas.some(o => m.observaciones.includes(o))
+        ? m.observaciones : null;
+      // Si tiene resultado de cursada, mostrar ese en lugar de "En curso"
+      const estadoFinal = m.resultado_cursada
+        ? (resultadoPill[m.resultado_cursada] || pillEstado[m.estado_secretaria] || '')
+        : (pillEstado[m.estado_secretaria] || '');
+
+      const claseCardFinal = m.resultado_cursada
+        ? (['aprobado','promocion'].includes(m.resultado_cursada) ? 'aprobado' : 'no-apto')
+        : (claseCard[m.estado_secretaria] || '');
+
+      return `
+      <div class="materia-card ${claseCardFinal}">
+        <div style="flex:1">
+          <div class="materia-nombre">${esc(m.nombre_materia)}</div>
+          <div class="materia-meta">
+            ${esc(m.codigo_materia || '')}
+            ${m.formato === 'cuatrimestral' ? ` · ${m.cuatrimestre}° cuatrimestre` : ' · Anual'}
+          </div>
+          ${obsVisible ? `<div class="text-sm" style="color:var(--warn);margin-top:4px">⚠ ${esc(obsVisible)}</div>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+          ${estadoFinal}
+        </div>
+      </div>`;
+    }).join('') +
+  `</div>`;
+}
+
+// ── Inscripción a materia ────────────────────────────────────────
+let idCarreraModal = null;
+
+async function abrirInscripcion(idCarrera, nombreCarrera) {
+  idCarreraModal = idCarrera;
+  document.getElementById('modalInscripcionTitulo').textContent = `Anotarme — ${nombreCarrera}`;
+  const cont    = document.getElementById('materiasDisponibles');
+  const sinDisp = document.getElementById('sinDisponibles');
+  cont.innerHTML = '<div class="text-sm text-muted" style="padding:12px">Cargando...</div>';
+  document.getElementById('modalInscripcion').classList.remove('hidden');
+
+  try {
+    const res  = await fetch(
+      API + '/alumno/materias-disponibles?dni=' + encodeURIComponent(dni) + '&id_carrera=' + idCarrera,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    const data = await res.json();
+    const disponibles = data.materias || [];
+
+    if (!disponibles.length) {
+      cont.style.display    = 'none';
+      sinDisp.style.display = 'block';
+      return;
+    }
+    sinDisp.style.display = 'none';
+    cont.style.display    = 'grid';
+
+    // Agrupar por año
+    const porAnio = {};
+    disponibles.forEach(m => {
+      if (!porAnio[m.anio_plan]) porAnio[m.anio_plan] = [];
+      porAnio[m.anio_plan].push(m);
+    });
+
+    cont.innerHTML = Object.entries(porAnio).map(([anio, mats]) => `
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);padding:8px 0 4px">
+        ${anio}° año
+      </div>
+      ${mats.map(m => `
+        <div class="disponible-card">
+          <div>
+            <div style="font-weight:600;font-size:14px">${esc(m.nombre_materia)}</div>
+            <div class="text-sm text-muted">
+              ${esc(m.codigo_materia || '')} · ${m.formato === 'cuatrimestral' ? m.cuatrimestre + '° cuatrim.' : 'Anual'}
+            </div>
+          </div>
+          <button class="btn btn-primary" style="padding:6px 14px;font-size:13px;flex-shrink:0"
+            onclick="inscribirse(${m.id_materia}, '${esc(m.nombre_materia)}')">
+            Anotarme
+          </button>
+        </div>
+      `).join('')}
+    `).join('');
+  } catch {
+    cont.innerHTML = '<div class="alert alert-error"><span>✕</span><span>Error al cargar materias.</span></div>';
+  }
+}
+
+function cerrarModalInscripcion() {
+  document.getElementById('modalInscripcion').classList.add('hidden');
+  idCarreraModal = null;
+}
+
+async function inscribirse(idMateria, nombreMateria) {
+  const ok = await confirmar({
+    titulo:  'Confirmar inscripción',
+    mensaje: `¿Querés anotarte a "${nombreMateria}"? Secretaría verificará si estás en condiciones.`,
+    btnOk:   'Sí, anotarme'
+  });
+  if (!ok) return;
+
+  try {
+    const res  = await fetch(API + '/alumno/inscribir-materia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dni, id_materia: idMateria }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      cerrarModalInscripcion();
+      await cargar();
+    } else {
+      alert(data.error || 'No se pudo registrar la inscripción.');
+    }
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+
+cargar();
+
+function cambiarSeccion(seccion) {
+  document.getElementById('seccionMaterias').style.display  = seccion === 'materias'  ? 'block' : 'none';
+  document.getElementById('seccionFinales').style.display   = seccion === 'finales'   ? 'block' : 'none';
+  document.getElementById('seccionHistorial').style.display = seccion === 'historial' ? 'block' : 'none';
+  document.getElementById('nav-materias').classList.toggle('active',  seccion === 'materias');
+  document.getElementById('nav-finales').classList.toggle('active',   seccion === 'finales');
+  document.getElementById('nav-historial').classList.toggle('active', seccion === 'historial');
+  if (seccion === 'finales')   cargarMesas();
+  if (seccion === 'historial') cargarHistorial();
+}
+
+async function cargarMesas() {
+  const cont = document.getElementById('mesasContenido');
+  cont.innerHTML = '<div class="text-sm text-muted" style="padding:12px">Cargando...</div>';
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(API + '/alumno/mesas?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(8000) }),
+      fetch(API + '/alumno/resultados-finales?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(8000) })
+    ]);
+    const dataMesas = await r1.json();
+    const dataRes   = await r2.json();
+    const mesas     = dataMesas.mesas      || [];
+    const resultados = dataRes.resultados  || [];
+
+    // Badge — mesas abiertas sin inscribir
+    const sinInscribir = mesas.filter(m => !m.inscripto).length;
+    const badge = document.getElementById('badgeFinales');
+    if (sinInscribir > 0) { badge.textContent = sinInscribir; badge.style.display = 'inline'; }
+    else badge.style.display = 'none';
+
+    const turnoLabel = { feb_mar: 'Feb - Mar', julio: 'Julio', nov_dic: 'Nov - Dic' };
+
+    let html = '';
+
+    // ── Sección: Mesas abiertas ──
+    html += `<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:10px">
+      Mesas abiertas para inscripción
+    </div>`;
+
+    if (!mesas.length) {
+      html += `<div class="empty-state" style="padding:24px">
+        <div class="empty-state-icon">📝</div>
+        <p class="text-sm">No hay mesas abiertas para tus materias en este momento.</p>
+      </div>`;
+    } else {
+      html += `<div class="grid" style="gap:10px;margin-bottom:24px">` +
+        mesas.map(m => `
+          <div style="background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 18px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <div>
+              <div style="font-weight:700;font-size:14px">${esc(m.nombre_materia)}</div>
+              <div class="text-sm text-muted" style="margin-top:3px">
+                ${esc(m.nombre_carrera)} · ${turnoLabel[m.turno] || m.turno} ${esc(String(m.anio))}
+                ${m.fecha_mesa ? ' · ' + new Date(m.fecha_mesa).toLocaleDateString('es-AR') : ''}
+                ${m.aula ? ' · 📍 ' + esc(m.aula) : ''}
+              </div>
+              ${m.docente_nombre ? `<div class="text-sm text-muted">👤 ${esc(m.docente_nombre)}</div>` : ''}
+            </div>
+            <div style="flex-shrink:0">
+              ${m.inscripto
+                ? '<span class="pill pill-aprobado">✓ Inscripto</span>'
+                : `<button class="btn btn-primary" style="padding:7px 16px;font-size:13px"
+                    onclick="anotarseAMesa(${m.id_mesa}, '${esc(m.nombre_materia)}')">
+                    Anotarme
+                   </button>`}
+            </div>
+          </div>
+        `).join('') +
+      `</div>`;
+    }
+
+    // ── Sección: Mis resultados ──
+    html += `<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:10px;padding-top:8px;border-top:1px solid var(--border)">
+      Mis resultados de exámenes finales
+    </div>`;
+
+    if (!resultados.length) {
+      html += `<div class="empty-state" style="padding:24px">
+        <div class="empty-state-icon">🎓</div>
+        <p class="text-sm">Todavía no tenés resultados de exámenes finales cargados.</p>
+      </div>`;
+    } else {
+      const resPill = {
+        aprobado:  '<span class="pill pill-aprobado">Aprobado</span>',
+        reprobado: '<span class="pill pill-rechazado">Reprobado</span>',
+        ausente:   '<span class="pill pill-pendiente">Ausente</span>',
+      };
+      html += `<div class="table-wrap"><table>
+        <thead>
+          <tr>
+            <th>Materia</th>
+            <th>Carrera</th>
+            <th>Turno</th>
+            <th>Fecha</th>
+            <th>Nota</th>
+            <th>Resultado</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${resultados.map(r => `
+            <tr>
+              <td><strong>${esc(r.nombre_materia)}</strong></td>
+              <td class="text-sm text-muted">${esc(r.nombre_carrera)}</td>
+              <td class="text-sm">${turnoLabel[r.turno] || r.turno} ${esc(String(r.anio))}</td>
+              <td class="text-sm">${r.fecha_mesa ? new Date(r.fecha_mesa).toLocaleDateString('es-AR') : '—'}</td>
+              <td><strong style="font-size:16px">${r.nota_obtenida != null ? r.nota_obtenida : '—'}</strong></td>
+              <td>${resPill[r.resultado] || '<span class="pill pill-pendiente">Sin resultado</span>'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table></div>`;
+    }
+
+    cont.innerHTML = html;
+  } catch {
+    cont.innerHTML = '<div class="alert alert-error"><span>✕</span><span>Error al cargar.</span></div>';
+  }
+}
+
+async function anotarseAMesa(idMesa, nombreMateria) {
+  const ok = await confirmar({
+    titulo:  'Inscribirme al examen',
+    mensaje: `¿Confirmás tu inscripción al examen final de "${nombreMateria}"? Secretaría verificará tu condición.`,
+    btnOk:   'Sí, anotarme'
+  });
+  if (!ok) return;
+
+  try {
+    const res  = await fetch(API + '/alumno/inscribir-mesa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dni, id_mesa: idMesa }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) cargarMesas();
+    else alert(data.error || 'No se pudo registrar la inscripción.');
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+
+async function cargarHistorial() {
+  const cont = document.getElementById('historialContenido');
+  cont.innerHTML = '<div class="text-sm text-muted text-center" style="padding:20px">Cargando...</div>';
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(API + '/alumno/historial-cursadas?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(8000) }),
+      fetch(API + '/alumno/resultados-finales?dni=' + encodeURIComponent(dni), { signal: AbortSignal.timeout(8000) })
+    ]);
+    const dataCurs = await r1.json();
+    const dataFin  = await r2.json();
+    const cursadas  = dataCurs.cursadas  || [];
+    const finales   = dataFin.resultados || [];
+
+    const turnoLabel = { feb_mar: 'Feb - Mar', julio: 'Julio', nov_dic: 'Nov - Dic' };
+
+    const resPillCurs = {
+      aprobado:    '<span class="pill pill-aprobado">✓ Aprobado</span>',
+      desaprobado: '<span class="pill pill-rechazado">✕ Desaprobado</span>',
+      promocion:   '<span class="pill" style="background:#e8f5ff;color:#1a6fa8">★ Promoción</span>',
+      ausente:     '<span class="pill pill-pendiente">Ausente</span>',
+      abandono:    '<span class="pill pill-rechazado">Abandono</span>',
+    };
+    const resPillFin = {
+      aprobado:  '<span class="pill pill-aprobado">✓ Aprobado</span>',
+      reprobado: '<span class="pill pill-rechazado">✕ Reprobado</span>',
+      ausente:   '<span class="pill pill-pendiente">Ausente</span>',
+    };
+
+    let html = '';
+
+    // ── Cursadas ──
+    html += `<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:10px">Cursadas</div>`;
+
+    if (!cursadas.length) {
+      html += `<div class="empty-state" style="padding:20px"><p class="text-sm">No hay cursadas registradas.</p></div>`;
+    } else {
+      html += `<div class="table-wrap" style="margin-bottom:24px"><table>
+        <thead><tr><th>Materia</th><th>Profesorado</th><th>Año</th><th>Resultado</th></tr></thead>
+        <tbody>
+          ${cursadas.map(c => `
+            <tr>
+              <td><strong>${esc(c.nombre_materia)}</strong></td>
+              <td class="text-sm text-muted">${esc(c.nombre_carrera)}</td>
+              <td class="text-sm">${esc(String(c.anio_cursada))}</td>
+              <td>${resPillCurs[c.resultado] || '<span class="text-muted">—</span>'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table></div>`;
+    }
+
+    // ── Exámenes finales rendidos ──
+    html += `<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:10px;padding-top:8px;border-top:1px solid var(--border)">Exámenes finales rendidos</div>`;
+
+    if (!finales.length) {
+      html += `<div class="empty-state" style="padding:20px"><p class="text-sm">No hay exámenes finales rendidos.</p></div>`;
+    } else {
+      html += `<div class="table-wrap"><table>
+        <thead><tr><th>Materia</th><th>Profesorado</th><th>Turno</th><th>Fecha</th><th>Nota</th><th>Resultado</th></tr></thead>
+        <tbody>
+          ${finales.map(f => `
+            <tr>
+              <td><strong>${esc(f.nombre_materia)}</strong></td>
+              <td class="text-sm text-muted">${esc(f.nombre_carrera)}</td>
+              <td class="text-sm">${turnoLabel[f.turno] || f.turno} ${esc(String(f.anio))}</td>
+              <td class="text-sm">${f.fecha_mesa ? new Date(f.fecha_mesa).toLocaleDateString('es-AR') : '—'}</td>
+              <td><strong style="font-size:16px">${f.nota_obtenida != null ? f.nota_obtenida : '—'}</strong></td>
+              <td>${resPillFin[f.resultado] || '<span class="text-muted">—</span>'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table></div>`;
+    }
+
+    cont.innerHTML = html;
+  } catch {
+    cont.innerHTML = '<div class="alert alert-error"><span>✕</span><span>Error al cargar historial.</span></div>';
+  }
+}
+</script>
+</body>
+</html>

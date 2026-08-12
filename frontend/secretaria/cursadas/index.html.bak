@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alumnos cursando — Secretaría IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .materia-row { background: var(--surface2); }
+    .materia-row td { padding: 10px 14px; font-size: 13px; }
+    .correlativa-ok   { color: var(--ok);   font-weight: 600; }
+    .correlativa-fail { color: var(--bad);  font-weight: 600; }
+    .expand-btn { background: none; border: none; cursor: pointer; color: var(--primary); font-size: 13px; font-weight: 600; padding: 0; width: auto; }
+    .expand-btn:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Secretaría — Alumnos cursando</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <a class="btn btn-secondary" href="/secretaria/">← Panel Secretaría</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <div class="card card-sm" id="sinSesion" style="display:none">
+    <div class="alert alert-warn">
+      <span>⚠</span><span>Sesión no iniciada. <a href="/secretaria/" style="color:var(--warn);font-weight:700">Ingresá desde el panel de Secretaría.</a></span>
+    </div>
+  </div>
+
+  <div id="panelContent" style="display:none">
+    <div class="page-hero">
+      <h1>Alumnos cursando</h1>
+      <p>Verificá las inscripciones a materias y controlá el cumplimiento de correlativas.</p>
+    </div>
+
+    <div class="grid grid-2" style="gap:16px;margin-bottom:20px" id="statsRow"></div>
+
+    <div class="card">
+      <div class="filter-bar">
+        <input type="search" id="busqueda" placeholder="Buscar por nombre, DNI o carrera..." oninput="filtrar()">
+        <select id="filtroEstado" onchange="filtrar()" style="max-width:200px">
+          <option value="">Todos los estados</option>
+          <option value="pendiente">Pendientes de verificación</option>
+          <option value="apto">Aptos</option>
+          <option value="no_apto">No aptos</option>
+        </select>
+        <select id="filtroCarrera" onchange="filtrar()" style="max-width:220px">
+          <option value="">Todas las carreras</option>
+        </select>
+        <button class="btn btn-secondary" onclick="cargar()">⟳ Actualizar</button>
+      </div>
+
+      <div class="table-wrap">
+        <table id="tablaAlumnos">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Alumno</th>
+              <th>DNI</th>
+              <th>Carrera</th>
+              <th>Año</th>
+              <th>Materias inscriptas</th>
+              <th>Pendientes</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div id="emptyState" class="empty-state" style="display:none">
+          <div class="empty-state-icon">📚</div>
+          <p>No hay alumnos con ese criterio.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Modal confirmación -->
+<div class="modal-overlay hidden" id="modalConfirm">
+  <div class="modal">
+    <h3 class="modal-title" id="modalConfirmTitle">¿Confirmar acción?</h3>
+    <p class="modal-body text-sm text-muted" id="modalConfirmMsg"></p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modalConfirmCancel">Cancelar</button>
+      <button class="btn btn-primary" id="modalConfirmOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal observaciones -->
+<div class="modal-overlay hidden" id="modalObs">
+  <div class="modal">
+    <h3 class="modal-title" id="modalObsTitle">Observaciones</h3>
+    <div class="modal-body">
+      <div class="field">
+        <label class="field-label">Motivo</label>
+        <textarea id="modalObsText" rows="4" style="resize:vertical;width:100%"
+                  placeholder="Indicá el motivo por el que no está apto..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <button class="btn btn-secondary" id="modalObsCancel">Cancelar</button>
+      <div class="actions" style="gap:8px">
+        <button class="btn btn-secondary" id="modalObsSinCorreo">Guardar sin correo</button>
+        <button class="btn btn-primary"   id="modalObsOk">Guardar y enviar correo ✉</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal correo -->
+<div class="modal-overlay hidden" id="modalCorreo">
+  <div class="modal" style="max-width:560px">
+    <h3 class="modal-title">Correo listo para enviar</h3>
+    <p class="text-sm text-muted" style="margin-bottom:16px">Revisá el contenido antes de enviarlo.</p>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;font-size:13px;line-height:1.7">
+      <div><strong>Para:</strong> <span id="correoDestinatario" style="color:var(--primary)"></span></div>
+      <div><strong>Asunto:</strong> <span id="correoAsunto"></span></div>
+      <div style="margin-top:10px;white-space:pre-wrap" id="correoCuerpo"></div>
+    </div>
+    <div class="modal-footer" style="margin-top:20px">
+      <button class="btn btn-secondary" id="modalCorreoCerrar">Cerrar</button>
+      <a class="btn btn-primary" id="modalCorreoLink" href="#" target="_blank">Abrir correo ✉</a>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+<script>
+let todosLosAlumnos = [];
+let expandidos      = new Set();
+
+if (!sessionStorage.getItem('sec_auth')) {
+  document.getElementById('sinSesion').style.display    = 'block';
+} else {
+  document.getElementById('panelContent').style.display = 'block';
+  cargar();
+}
+
+async function cargar() {
+  try {
+    const res  = await fetch(API + '/secretaria/cursadas', { signal: AbortSignal.timeout(8000) });
+    todosLosAlumnos = await res.json();
+    poblarFiltroCarreras();
+    renderStats();
+    filtrar();
+  } catch {
+    document.getElementById('tbody').innerHTML = `<tr><td colspan="7" class="text-center text-muted">Error al cargar datos.</td></tr>`;
+  }
+}
+
+function poblarFiltroCarreras() {
+  const sel = document.getElementById('filtroCarrera');
+  const carreras = [...new Set(todosLosAlumnos.map(a => a.nombre_carrera))].sort();
+  sel.innerHTML = '<option value="">Todas las carreras</option>';
+  carreras.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    sel.appendChild(o);
+  });
+}
+
+function renderStats() {
+  let totalMaterias = 0, pendientes = 0, noAptos = 0;
+  todosLosAlumnos.forEach(a => {
+    a.materias.forEach(m => {
+      totalMaterias++;
+      if (m.estado_condicion === 'pendiente') pendientes++;
+      if (m.estado_condicion === 'no_apto')   noAptos++;
+    });
+  });
+  document.getElementById('statsRow').innerHTML = `
+    <div class="card" style="margin:0;background:var(--warn-bg);border-color:#f5dcb0">
+      <div style="font-size:28px;font-weight:700;color:var(--warn)">${pendientes}</div>
+      <div class="text-sm text-muted">Inscripciones pendientes de verificación</div>
+    </div>
+    <div class="card" style="margin:0;background:var(--bad-bg);border-color:#f5c2c2">
+      <div style="font-size:28px;font-weight:700;color:var(--bad)">${noAptos}</div>
+      <div class="text-sm text-muted">No aptos</div>
+    </div>
+  `;
+}
+
+function filtrar() {
+  const busq    = document.getElementById('busqueda').value.toLowerCase();
+  const estado  = document.getElementById('filtroEstado').value;
+  const carrera = document.getElementById('filtroCarrera').value;
+
+  const datos = todosLosAlumnos.filter(a => {
+    const texto = `${a.apellido} ${a.nombre} ${a.dni} ${a.nombre_carrera}`.toLowerCase();
+    if (busq && !texto.includes(busq)) return false;
+    if (carrera && a.nombre_carrera !== carrera) return false;
+    if (estado) {
+      // Mostrar alumno solo si tiene al menos una materia con ese estado
+      return a.materias.some(m => m.estado_condicion === estado);
+    }
+    return true;
+  });
+  renderTabla(datos);
+}
+
+function renderTabla(datos) {
+  const tb    = document.getElementById('tbody');
+  const empty = document.getElementById('emptyState');
+  if (!datos.length) { tb.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  const rows = [];
+  datos.forEach(a => {
+    const pendientes = a.materias.filter(m => m.estado_condicion === 'pendiente').length;
+    const noAptos    = a.materias.filter(m => m.estado_condicion === 'no_apto').length;
+    const expandido  = expandidos.has(a.id_estudiante);
+
+    // Fila principal del alumno
+    rows.push(`
+      <tr>
+        <td>
+          <button class="expand-btn" onclick="toggleExpand(${a.id_estudiante})">
+            ${expandido ? '▼' : '▶'}
+          </button>
+        </td>
+        <td>
+          <div class="td-name">${esc(a.apellido)}, ${esc(a.nombre)}</div>
+          <div class="td-sub">${a.correo ? esc(a.correo) : '<span style="color:var(--warn)">Sin correo</span>'}</div>
+        </td>
+        <td>${esc(a.dni)}</td>
+        <td>${esc(a.nombre_carrera)}</td>
+        <td>${esc(a.anio_actual)}°</td>
+        <td><span class="text-sm">${a.materias.length} materia${a.materias.length !== 1 ? 's' : ''}</span></td>
+        <td>
+          ${pendientes > 0 ? `<span class="pill pill-observado">${pendientes} pendiente${pendientes>1?'s':''}</span>` : ''}
+          ${noAptos    > 0 ? `<span class="pill pill-rechazado" style="margin-left:4px">${noAptos} no apto${noAptos>1?'s':''}</span>` : ''}
+          ${pendientes === 0 && noAptos === 0 ? '<span class="pill pill-aprobado">Todo verificado</span>' : ''}
+        </td>
+      </tr>
+    `);
+
+    // Filas de materias (expandibles)
+    if (expandido) {
+      a.materias.forEach(m => {
+        const corrOk   = m.correlativas_ok   || [];
+        const corrFail = m.correlativas_fail || [];
+        const pillEstado = {
+          pendiente: '<span class="pill pill-pendiente">Pendiente</span>',
+          apto:      '<span class="pill pill-aprobado">Apto</span>',
+          no_apto:   '<span class="pill pill-rechazado">No apto</span>',
+        }[m.estado_condicion] || '';
+
+        const corrHtml = [
+          ...corrOk.map(c   => `<span class="correlativa-ok">✓ ${esc(c)}</span>`),
+          ...corrFail.map(c => `<span class="correlativa-fail">✕ ${esc(c)}</span>`)
+        ].join('<br>') || '<span class="text-muted">Sin correlativas</span>';
+
+        const acciones = m.estado_condicion === 'pendiente' ? `
+          <div class="actions" style="gap:6px">
+            <button class="btn btn-ok"  style="padding:4px 10px;font-size:12px"
+              onclick="verificar(${a.id_estudiante},'${esc(a.apellido)} ${esc(a.nombre)}','${esc(a.correo||'')}',${m.id_inscripcion_materia},'apto','${esc(m.nombre_materia)}')">
+              ✓ Apto
+            </button>
+            <button class="btn btn-bad" style="padding:4px 10px;font-size:12px"
+              onclick="verificar(${a.id_estudiante},'${esc(a.apellido)} ${esc(a.nombre)}','${esc(a.correo||'')}',${m.id_inscripcion_materia},'no_apto','${esc(m.nombre_materia)}')">
+              ✕ No apto
+            </button>
+          </div>` : `<div class="actions" style="gap:6px">
+            ${pillEstado}
+            <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px"
+              onclick="verificar(${a.id_estudiante},'${esc(a.apellido)} ${esc(a.nombre)}','${esc(a.correo||'')}',${m.id_inscripcion_materia},'pendiente','${esc(m.nombre_materia)}')">
+              ↩ Revertir
+            </button>
+          </div>`;
+
+        const resultadoPill = {
+          aprobado:    '<span class="pill pill-aprobado">Aprobado</span>',
+          desaprobado: '<span class="pill pill-rechazado">Desaprobado</span>',
+          promocion:   '<span class="pill" style="background:#e8f5ff;color:#1a6fa8">Promoción</span>',
+          ausente:     '<span class="pill pill-pendiente">Ausente</span>',
+          abandono:    '<span class="pill pill-rechazado">Abandono</span>',
+        }[m.resultado_cursada] || '<span class="text-muted text-sm">Sin resultado</span>';
+
+        rows.push(`
+          <tr class="materia-row">
+            <td></td>
+            <td style="padding-left:32px">
+              <strong>${esc(m.nombre_materia)}</strong>
+              <div class="text-sm text-muted">${esc(m.codigo_materia||'')} — ${esc(m.formato)} — ${esc(m.carrera_materia||'')}</div>
+            </td>
+            <td>${corrHtml}</td>
+            <td>${pillEstado}</td>
+            <td>${resultadoPill}</td>
+            <td>
+              <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                <select id="sec-sel-${m.id_inscripcion_materia}"
+                  style="padding:4px 8px;font-size:12px;border-radius:var(--radius-sm);border:1.5px solid var(--border);font:inherit;min-width:130px">
+                  <option value="">— Cargar resultado —</option>
+                  <option value="aprobado"    ${m.resultado_cursada==='aprobado'    ?'selected':''}>Aprobado</option>
+                  <option value="desaprobado" ${m.resultado_cursada==='desaprobado' ?'selected':''}>Desaprobado</option>
+                  <option value="promocion"   ${m.resultado_cursada==='promocion'   ?'selected':''}>Promoción</option>
+                  <option value="ausente"     ${m.resultado_cursada==='ausente'     ?'selected':''}>Ausente</option>
+                  <option value="abandono"    ${m.resultado_cursada==='abandono'    ?'selected':''}>Abandono</option>
+                </select>
+                <button class="btn btn-primary" style="padding:4px 10px;font-size:12px"
+                  onclick="guardarResultadoSec(${m.id_inscripcion_materia},'${esc(a.apellido)} ${esc(a.nombre)}','${esc(m.nombre_materia)}')">
+                  Guardar
+                </button>
+              </div>
+            </td>
+          </tr>
+        `);
+      });
+    }
+  });
+
+  tb.innerHTML = rows.join('');
+}
+
+function toggleExpand(id) {
+  if (expandidos.has(id)) expandidos.delete(id);
+  else expandidos.add(id);
+  filtrar();
+}
+
+async function verificar(idEstudiante, nombre, correo, idInscripcion, nuevoEstado, nombreMateria) {
+  let observaciones = '';
+  let enviarCorreo  = false;
+
+  if (nuevoEstado === 'no_apto') {
+    const resultado = await pedirObservacionesConCorreo({
+      titulo:      `No apto — ${nombre}`,
+      placeholder: `Indicá por qué no puede cursar ${nombreMateria}...`,
+      tieneCorreo: !!correo
+    });
+    if (resultado === null) return;
+    observaciones = resultado.texto;
+    enviarCorreo  = resultado.conCorreo;
+  } else if (nuevoEstado === 'apto') {
+    const ok = await confirmar({
+      titulo:  `Habilitar cursada`,
+      mensaje: `¿Confirmás que ${nombre} está apto para cursar ${nombreMateria}?`,
+      btnOk:   'Sí, habilitar', tipo: 'ok'
+    });
+    if (!ok) return;
+  }
+
+  try {
+    const res  = await fetch(API + '/secretaria/cursadas/verificar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_inscripcion_materia: idInscripcion, estado: nuevoEstado, observaciones }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      await cargar();
+      if (enviarCorreo && correo && nuevoEstado === 'no_apto') {
+        abrirCorreoNoApto(correo, nombre, nombreMateria, observaciones);
+      }
+    } else {
+      alert(data.error || 'Error al guardar.');
+    }
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+
+function pedirObservacionesConCorreo({ titulo, placeholder, tieneCorreo }) {
+  return new Promise(resolve => {
+    const overlay   = document.getElementById('modalObs');
+    const titleEl   = document.getElementById('modalObsTitle');
+    const textarea  = document.getElementById('modalObsText');
+    const btnOk     = document.getElementById('modalObsOk');
+    const btnSin    = document.getElementById('modalObsSinCorreo');
+    const btnCancel = document.getElementById('modalObsCancel');
+    titleEl.textContent  = titulo;
+    textarea.placeholder = placeholder;
+    textarea.value       = '';
+    btnOk.style.display  = tieneCorreo ? '' : 'none';
+    overlay.classList.remove('hidden');
+    const close = val => {
+      overlay.classList.add('hidden');
+      btnOk.removeEventListener('click', onOk);
+      btnSin.removeEventListener('click', onSin);
+      btnCancel.removeEventListener('click', onCancel);
+      resolve(val);
+    };
+    const onOk     = () => close({ texto: textarea.value.trim(), conCorreo: true });
+    const onSin    = () => close({ texto: textarea.value.trim(), conCorreo: false });
+    const onCancel = () => close(null);
+    btnOk.addEventListener('click', onOk);
+    btnSin.addEventListener('click', onSin);
+    btnCancel.addEventListener('click', onCancel);
+  });
+}
+
+function abrirCorreoNoApto(correo, nombre, materia, observaciones) {
+  const asunto = 'IFDC Río Colorado — Observación en tu inscripción a materia';
+  const cuerpo = `Estimado/a ${nombre}:\n\nTe informamos que tu inscripción a la materia "${materia}" fue revisada por Secretaría y presenta el siguiente inconveniente:\n\n${observaciones||'(sin observaciones)'}\n\nPor favor, comunicate con Secretaría para regularizar tu situación.\n\nSaludos,\nSecretaría — IFDC Río Colorado`;
+  document.getElementById('correoDestinatario').textContent = correo;
+  document.getElementById('correoAsunto').textContent       = asunto;
+  document.getElementById('correoCuerpo').textContent       = cuerpo;
+  document.getElementById('modalCorreoLink').href = `mailto:${encodeURIComponent(correo)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+  const overlay = document.getElementById('modalCorreo');
+  overlay.classList.remove('hidden');
+  document.getElementById('modalCorreoCerrar').onclick = () => overlay.classList.add('hidden');
+}
+
+async function guardarResultadoSec(idInscripcion, nombre, nombreMateria) {
+  const sel       = document.getElementById('sec-sel-' + idInscripcion);
+  const resultado = sel?.value;
+  if (!resultado) return;
+
+  const ok = await confirmar({
+    titulo:  'Cargar resultado de cursada',
+    mensaje: `¿Confirmás cargar "${resultado}" para ${nombre} en ${nombreMateria}?`,
+    btnOk:   'Sí, guardar'
+  });
+  if (!ok) return;
+
+  try {
+    const res  = await fetch(API + '/docente/cursadas/resultado', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_inscripcion_materia: idInscripcion, resultado }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) await cargar();
+    else alert(data.error || 'Error al guardar.');
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+</script>
+</body>
+</html>

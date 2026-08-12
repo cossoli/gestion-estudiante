@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Gestión Académica — IFDC Río Colorado</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo"><img src="/assets/logo.png" alt="Logo IFDC" style="width:100%;height:100%;object-fit:contain;"></div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Sistema de Gestión Académica</div>
+      </div>
+    </div>
+    <div class="header-nav" id="headerNav"></div>
+  </div>
+</header>
+
+<main>
+  <div class="page-hero text-center" style="margin-bottom:8px">
+    <h1>Gestión Académica</h1>
+    <p>Seleccioná tu acceso según tu rol en la institución.</p>
+  </div>
+
+  <div class="menu-grid">
+    <a class="menu-card" href="/acceso/">
+      <div class="menu-card-icon blue">🎓</div>
+      <h3>Estudiantes</h3>
+      <p>Ingresá con tu DNI para completar tu inscripción, ver el estado de tu trámite y gestionar tus materias.</p>
+      <span class="menu-card-arrow">→</span>
+    </a>
+    <a class="menu-card" href="/secretaria/">
+      <div class="menu-card-icon green">📋</div>
+      <h3>Secretaría</h3>
+      <p>Revisá ingresantes, verificá cursadas y gestioná las inscripciones a materias.</p>
+      <span class="menu-card-arrow">→</span>
+    </a>
+    <a class="menu-card" href="/tic/">
+      <div class="menu-card-icon amber">💻</div>
+      <h3>Área TIC</h3>
+      <p>Gestioná la carga de estudiantes aprobados en la plataforma institucional.</p>
+      <span class="menu-card-arrow">→</span>
+    </a>
+    <a class="menu-card" href="/docente/">
+      <div class="menu-card-icon blue">🧑‍🏫</div>
+      <h3>Docentes</h3>
+      <p>Cargá resultados de cursadas y notas de exámenes finales de tus materias.</p>
+      <span class="menu-card-arrow">→</span>
+    </a>
+  </div>
+
+  <div id="healthStatus" style="margin-top:24px"></div>
+</main>
+
+<script src="/app.js"></script>
+<script>
+const dniGuardado = localStorage.getItem('estudiante_dni');
+if (dniGuardado) {
+  document.getElementById('headerNav').innerHTML = `
+    <span class="text-sm text-muted">DNI: ${esc(dniGuardado)}</span>
+    <a class="btn btn-secondary" href="/panel/">Mi panel</a>
+    <a class="btn btn-secondary" href="/inscripcion/">Mis datos</a>
+    <button class="btn btn-secondary" onclick="cerrarSesion()">Salir</button>
+  `;
+}
+
+function cerrarSesion() {
+  localStorage.removeItem('estudiante_dni');
+  window.location.reload();
+}
+
+(async () => {
+  try {
+    const res  = await fetch(API + '/health', { signal: AbortSignal.timeout(4000) });
+    const data = await res.json();
+    if (!data.ok) throw new Error();
+  } catch {
+    setStatus(document.getElementById('healthStatus'), 'El servidor no responde. Algunos servicios pueden no estar disponibles.', 'warn');
+  }
+})();
+</script>
+</body>
+</html>

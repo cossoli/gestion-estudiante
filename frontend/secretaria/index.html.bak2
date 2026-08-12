@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Secretaría — IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Panel Secretaría</div>
+      </div>
+    </div>
+    <nav class="header-nav" id="headerNav">
+      <a class="btn btn-secondary" href="/inicio/">← Menú principal</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <!-- Login -->
+  <div class="card card-sm" id="loginCard">
+    <h2 class="card-title">Acceso Secretaría</h2>
+    <p class="card-subtitle">Ingresá la contraseña de acceso al panel.</p>
+    <div class="grid" style="gap:14px">
+      <div class="field">
+        <label class="field-label" for="password">Contraseña</label>
+        <input id="password" type="password" placeholder="Contraseña de secretaría" autocomplete="current-password">
+      </div>
+      <div id="loginStatus" class="alert" style="display:none"></div>
+      <button id="btnLogin" class="btn btn-primary btn-full" onclick="login()">Ingresar</button>
+    </div>
+  </div>
+
+  <!-- Menú -->
+  <div id="menuSecretaria" style="display:none">
+    <div class="page-hero">
+      <h1>Panel Secretaría</h1>
+      <p>Seleccioná la sección que querés gestionar.</p>
+    </div>
+
+    <div id="statsRow" class="grid grid-2" style="gap:16px;margin-bottom:24px"></div>
+
+    <div class="menu-grid">
+      <a class="menu-card" href="/secretaria/ingresantes/">
+        <div class="menu-card-icon green">📋</div>
+        <h3>Ingresantes</h3>
+        <p>Revisá y aprobá las inscripciones de los nuevos estudiantes. Verificá documentación y datos personales.</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <span id="badgePendientes" class="pill pill-observado" style="display:none"></span>
+          <span class="menu-card-arrow">→</span>
+        </div>
+      </a>
+      <a class="menu-card" href="/secretaria/cursadas/">
+        <div class="menu-card-icon blue">📚</div>
+        <h3>Alumnos cursando</h3>
+        <p>Verificá inscripciones a materias. Controlá correlativas y habilitá o rechazá cursadas.</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <span id="badgeCursadas" class="pill pill-observado" style="display:none"></span>
+          <span class="menu-card-arrow">→</span>
+        </div>
+      </a>
+      <a class="menu-card" href="/secretaria/mesas/">
+        <div class="menu-card-icon amber">📝</div>
+        <h3>Mesas de examen</h3>
+        <p>Creá mesas de examen final, verificá condiciones y cargá los resultados de los alumnos.</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <span id="badgeMesas" class="pill pill-observado" style="display:none"></span>
+          <span class="menu-card-arrow">→</span>
+        </div>
+      </a>
+      <a class="menu-card" href="/secretaria/actas/">
+        <div class="menu-card-icon blue">&#128203;</div>
+        <h3>Actas de cursado</h3>
+        <p>Genera el listado de alumnos por materia y profesorado para imprimir o exportar.</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <span class="menu-card-arrow">&#8594;</span>
+        </div>
+      </a>
+    </div>
+  </div>
+
+</main>
+
+<script src="/app.js"></script>
+<script>
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('loginCard').style.display !== 'none') login();
+});
+
+async function login() {
+  const password = document.getElementById('password').value;
+  const status   = document.getElementById('loginStatus');
+  const btn      = document.getElementById('btnLogin');
+  clearStatus(status);
+  if (!password) return setStatus(status, 'Ingresá la contraseña.', 'warn');
+
+  setLoading(btn, true, 'Ingresando...');
+  try {
+    const res  = await fetch(API + '/secretaria/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+      signal: AbortSignal.timeout(6000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      sessionStorage.setItem('sec_auth', '1');
+      mostrarMenu();
+    } else {
+      setStatus(status, data.error || 'Contraseña incorrecta.', 'error');
+    }
+  } catch {
+    setStatus(status, 'No se pudo conectar con el servidor.', 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+function cerrarSesion() {
+  sessionStorage.removeItem('sec_auth');
+  window.location.reload();
+}
+
+async function mostrarMenu() {
+  document.getElementById('loginCard').style.display      = 'none';
+  document.getElementById('menuSecretaria').style.display = 'block';
+  document.getElementById('headerNav').innerHTML = `
+    <span class="text-sm text-muted">Secretaría</span>
+    <button class="btn btn-secondary" onclick="cerrarSesion()">Salir</button>
+    <a class="btn btn-secondary" href="/inicio/">Menú</a>
+  `;
+  await cargarStats();
+}
+
+async function cargarStats() {
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(API + '/secretaria/inscriptos',        { signal: AbortSignal.timeout(6000) }),
+      fetch(API + '/secretaria/cursadas/pendientes', { signal: AbortSignal.timeout(6000) })
+    ]);
+    const ins  = await r1.json();
+    const curs = await r2.json();
+
+    const pendIng  = Array.isArray(ins)  ? ins.filter(e => e.estado_general === 'pendiente_secretaria').length : 0;
+    const pendCurs = Array.isArray(curs) ? curs.length : 0;
+
+    if (pendIng > 0) {
+      const b = document.getElementById('badgePendientes');
+      b.textContent   = pendIng + ' pendiente' + (pendIng > 1 ? 's' : '');
+      b.style.display = 'inline-flex';
+    }
+    if (pendCurs > 0) {
+      const b = document.getElementById('badgeCursadas');
+      b.textContent   = pendCurs + ' pendiente' + (pendCurs > 1 ? 's' : '');
+      b.style.display = 'inline-flex';
+    }
+
+    document.getElementById('statsRow').innerHTML = `
+      <div class="card" style="margin:0;background:var(--warn-bg);border-color:#f5dcb0">
+        <div style="font-size:28px;font-weight:700;color:var(--warn)">${pendIng}</div>
+        <div class="text-sm text-muted">Ingresantes pendientes</div>
+      </div>
+      <div class="card" style="margin:0;background:var(--info-bg);border-color:#c0d4f5">
+        <div style="font-size:28px;font-weight:700;color:var(--info)">${pendCurs}</div>
+        <div class="text-sm text-muted">Cursadas por verificar</div>
+      </div>
+    `;
+  } catch { /* silencioso */ }
+}
+
+if (sessionStorage.getItem('sec_auth')) mostrarMenu();
+</script>
+</body>
+</html>

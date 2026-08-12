@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Actas de cursado — Secretaría IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .acta-header { display:none; }
+    @media print {
+      header, .filter-bar, .actions-bar, .btn { display:none !important; }
+      .acta-header { display:block !important; margin-bottom:24px; }
+      body { background:#fff; }
+      .card { box-shadow:none; border:none; padding:0; }
+      main { max-width:100%; }
+    }
+    .firma-line {
+      margin-top:60px; display:flex; justify-content:space-between; gap:40px;
+    }
+    .firma-line div { flex:1; text-align:center; border-top:1px solid #333; padding-top:6px; font-size:13px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Secretaría — Actas de cursado</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <a class="btn btn-secondary" href="/secretaria/">← Panel Secretaría</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <div class="card card-sm" id="sinSesion" style="display:none">
+    <div class="alert alert-warn">
+      <span>⚠</span><span>Sesión no iniciada. <a href="/secretaria/" style="color:var(--warn);font-weight:700">Ingresá desde el panel de Secretaría.</a></span>
+    </div>
+  </div>
+
+  <div id="panelContent" style="display:none">
+    <div class="page-hero">
+      <h1>Actas de cursado</h1>
+      <p>Elegí profesorado, materia y año para generar el listado de alumnos.</p>
+    </div>
+
+    <div class="card">
+      <div class="filter-bar">
+        <select id="selCarrera" onchange="onCarreraChange()">
+          <option value="">Profesorado...</option>
+        </select>
+        <select id="selMateria" onchange="onMateriaChange()" disabled>
+          <option value="">Materia...</option>
+        </select>
+        <input type="number" id="inputAnio" placeholder="Año de corte" style="max-width:140px">
+        <button class="btn btn-primary" onclick="buscar()">Buscar</button>
+      </div>
+    </div>
+
+    <div class="card" id="resultadoCard" style="display:none">
+      <div class="acta-header">
+        <h2 style="margin:0 0 4px 0">IFDC Río Colorado</h2>
+        <div style="font-size:14px;color:#333">Acta de cursado</div>
+        <div style="font-size:13px;color:#555;margin-top:8px">
+          <div><strong>Profesorado:</strong> <span id="actaCarrera"></span></div>
+          <div><strong>Materia:</strong> <span id="actaMateria"></span> (<span id="actaCodigo"></span>)</div>
+          <div><strong>Año:</strong> <span id="actaAnio"></span></div>
+          <div><strong>Fecha de emisión:</strong> <span id="actaFecha"></span></div>
+        </div>
+        <hr style="margin:16px 0">
+      </div>
+
+      <div class="actions-bar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <div class="text-sm text-muted" id="resumenTexto"></div>
+        <div class="actions" style="gap:8px">
+          <button class="btn btn-secondary" onclick="exportarCSV()">⭳ Exportar CSV</button>
+          <button class="btn btn-primary" onclick="window.print()">🖶 Imprimir / PDF</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table id="tablaAlumnos">
+          <thead>
+            <tr>
+              <th>Apellido y Nombre</th>
+              <th>DNI</th>
+              <th>Condición</th>
+              <th>Resultado</th>
+              <th>Fecha</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyAlumnos"></tbody>
+        </table>
+        <div id="emptyState" class="empty-state" style="display:none">
+          <div class="empty-state-icon">📋</div>
+          <p>No hay alumnos inscriptos con esos filtros.</p>
+        </div>
+      </div>
+
+      <div class="firma-line">
+        <div>Firma Secretaría</div>
+        <div>Firma Docente</div>
+        <div>Firma Dirección</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script src="/app.js"></script>
+<script>
+let datosActuales = null;
+
+const condicionLabel = { pendiente: 'Pendiente', habilitado: 'Habilitado', rechazado: 'No apto', observado: 'Observado' };
+const resultadoLabel = { aprobado: 'Aprobado', desaprobado: 'Desaprobado', promocion: 'Promoción', ausente: 'Ausente', abandono: 'Abandono' };
+
+if (!sessionStorage.getItem('sec_auth')) {
+  document.getElementById('sinSesion').style.display    = 'block';
+} else {
+  document.getElementById('panelContent').style.display = 'block';
+  document.getElementById('inputAnio').value = new Date().getFullYear();
+  cargarCarreras();
+}
+
+async function cargarCarreras() {
+  try {
+    const res = await fetch(API + '/carreras', { signal: AbortSignal.timeout(8000) });
+    const carreras = await res.json();
+    const sel = document.getElementById('selCarrera');
+    sel.innerHTML = '<option value="">Profesorado...</option>';
+    carreras.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.id_carrera; o.textContent = c.nombre_carrera;
+      sel.appendChild(o);
+    });
+  } catch {
+    alert('No se pudieron cargar los profesorados.');
+  }
+}
+
+async function onCarreraChange() {
+  const idCarrera = document.getElementById('selCarrera').value;
+  const selMateria = document.getElementById('selMateria');
+  selMateria.innerHTML = '<option value="">Materia...</option>';
+  selMateria.disabled = true;
+  document.getElementById('resultadoCard').style.display = 'none';
+  if (!idCarrera) return;
+
+  try {
+    const res = await fetch(API + '/materias?id_carrera=' + idCarrera, { signal: AbortSignal.timeout(8000) });
+    const materias = await res.json();
+    materias.forEach(m => {
+      const o = document.createElement('option');
+      o.value = m.id_materia; o.textContent = m.nombre_materia + ' (' + m.codigo_materia + ')';
+      selMateria.appendChild(o);
+    });
+    selMateria.disabled = false;
+  } catch {
+    alert('No se pudieron cargar las materias.');
+  }
+}
+
+function onMateriaChange() {
+  document.getElementById('resultadoCard').style.display = 'none';
+}
+
+async function buscar() {
+  const idMateria = document.getElementById('selMateria').value;
+  const anio      = document.getElementById('inputAnio').value;
+  if (!idMateria) { alert('Elegí una materia.'); return; }
+  if (!anio)      { alert('Ingresá un año.'); return; }
+
+  try {
+    const res  = await fetch(API + '/secretaria/actas/alumnos?id_materia=' + idMateria + '&anio=' + anio, { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Error al buscar.'); return; }
+    datosActuales = data;
+    renderResultado(data);
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+
+function renderResultado(data) {
+  document.getElementById('resultadoCard').style.display = 'block';
+  document.getElementById('actaCarrera').textContent = data.materia.nombre_carrera;
+  document.getElementById('actaMateria').textContent = data.materia.nombre_materia;
+  document.getElementById('actaCodigo').textContent  = data.materia.codigo_materia;
+  document.getElementById('actaAnio').textContent    = data.anio;
+  document.getElementById('actaFecha').textContent   = new Date().toLocaleDateString('es-AR');
+  document.getElementById('resumenTexto').textContent = data.alumnos.length + ' alumno(s) inscripto(s)';
+
+  const tb    = document.getElementById('tbodyAlumnos');
+  const empty = document.getElementById('emptyState');
+  if (!data.alumnos.length) {
+    tb.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tb.innerHTML = data.alumnos.map(a => `
+    <tr>
+      <td>${esc(a.apellido)}, ${esc(a.nombre)}</td>
+      <td>${esc(a.dni)}</td>
+      <td>${condicionLabel[a.estado_secretaria] || esc(a.estado_secretaria || '')}</td>
+      <td>${a.resultado_cursada ? (resultadoLabel[a.resultado_cursada] || esc(a.resultado_cursada)) : '—'}</td>
+      <td>${esc(a.fecha_resultado || '—')}</td>
+    </tr>
+  `).join('');
+}
+
+function exportarCSV() {
+  if (!datosActuales || !datosActuales.alumnos.length) { alert('No hay datos para exportar.'); return; }
+  const filas = [['Apellido', 'Nombre', 'DNI', 'Condición', 'Resultado', 'Fecha']];
+  datosActuales.alumnos.forEach(a => {
+    filas.push([
+      a.apellido, a.nombre, a.dni,
+      condicionLabel[a.estado_secretaria] || a.estado_secretaria || '',
+      a.resultado_cursada ? (resultadoLabel[a.resultado_cursada] || a.resultado_cursada) : '',
+      a.fecha_resultado || ''
+    ]);
+  });
+  const csv = filas.map(fila => fila.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const nombreArchivo = `acta_${datosActuales.materia.nombre_materia.replace(/\s+/g,'_')}_${datosActuales.anio}.csv`;
+  a.href = url; a.download = nombreArchivo;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+</body>
+</html>

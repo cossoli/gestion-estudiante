@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Materias asignadas — Docente IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .carrera-titulo {
+      font-size: 12px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--text-3);
+      padding: 20px 0 8px; border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .materia-bloque { margin-bottom: 28px; }
+    .materia-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px; flex-wrap: wrap; gap: 8px;
+    }
+    .materia-titulo { font-weight: 700; font-size: 16px; }
+    .materia-meta   { font-size: 13px; color: var(--text-3); margin-top: 2px; }
+    .resultado-select {
+      padding: 6px 10px; font-size: 13px; border-radius: var(--radius-sm);
+      border: 1.5px solid var(--border); font: inherit; cursor: pointer;
+      background: var(--surface); min-width: 160px;
+    }
+    .resultado-select:focus { border-color: var(--primary); outline: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle" id="subtituloHeader">Docente — Materias asignadas</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <a class="btn btn-secondary" href="/docente/">← Mi panel</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <div class="card card-sm" id="sinSesion" style="display:none">
+    <div class="alert alert-warn">
+      <span>⚠</span><span>Sesión no iniciada. <a href="/docente/" style="color:var(--warn);font-weight:700">Ingresá desde el panel docente.</a></span>
+    </div>
+  </div>
+
+  <div id="panelContent" style="display:none">
+    <div class="page-hero" style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <h1>Materias asignadas</h1>
+        <p id="periodoActual" class="text-muted">Alumnos inscriptos en tus materias del año lectivo actual.</p>
+      </div>
+      <!-- Selector de período -->
+      <div class="actions" style="align-items:flex-end;gap:8px">
+        <div class="field" style="margin:0">
+          <label class="field-label">Cuatrimestre</label>
+          <select id="selCuatrimestre" onchange="cargarTodo()" style="width:auto">
+            <option value="1">1° cuatrimestre</option>
+            <option value="2">2° cuatrimestre</option>
+            <option value="anual">Anual</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0">
+          <label class="field-label">Año</label>
+          <input id="selAnio" type="number" onchange="cargarTodo()"
+                 style="width:90px" min="2020" max="2099">
+        </div>
+      </div>
+    </div>
+
+    <div id="cargando" class="card text-center" style="padding:40px">
+      <div class="spinner" style="border-color:rgba(26,63,168,.2);border-top-color:var(--primary);width:28px;height:28px;margin:0 auto 12px"></div>
+      <p class="text-sm text-muted">Cargando alumnos...</p>
+    </div>
+
+    <div id="contenido"></div>
+  </div>
+
+</main>
+
+<!-- Modal confirmación -->
+<div class="modal-overlay hidden" id="modalConfirm">
+  <div class="modal">
+    <h3 class="modal-title" id="modalConfirmTitle">¿Confirmar?</h3>
+    <p class="modal-body text-sm text-muted" id="modalConfirmMsg"></p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modalConfirmCancel">Cancelar</button>
+      <button class="btn btn-primary" id="modalConfirmOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+<script>
+let docenteData = null;
+let datosCargados = {}; // { id_materia: [alumnos] }
+
+if (!localStorage.getItem('docente_auth')) {
+  document.getElementById('sinSesion').style.display    = 'block';
+} else {
+  docenteData = JSON.parse(localStorage.getItem('docente_data') || '{}');
+  document.getElementById('panelContent').style.display = 'block';
+  document.getElementById('subtituloHeader').textContent =
+    `Prof. ${docenteData.apellido}, ${docenteData.nombre} — Cursadas`;
+
+  // Detectar cuatrimestre actual
+  const mes = new Date().getMonth() + 1; // 1-12
+  const cuatrimestre = mes >= 3 && mes <= 7 ? '1' : mes >= 8 ? '2' : '1';
+  document.getElementById('selCuatrimestre').value = cuatrimestre;
+  document.getElementById('selAnio').value          = new Date().getFullYear();
+
+  cargarTodo();
+}
+
+async function cargarTodo() {
+  const cuatrimestre = document.getElementById('selCuatrimestre').value;
+  const anio         = document.getElementById('selAnio').value;
+
+  const label = cuatrimestre === 'anual'
+    ? `Materias anuales — ${anio}`
+    : `${cuatrimestre}° cuatrimestre ${anio}`;
+  document.getElementById('periodoActual').textContent = label;
+
+  document.getElementById('cargando').style.display  = 'block';
+  document.getElementById('contenido').style.display = 'none';
+  datosCargados = {};
+
+  try {
+    // 1. Traer materias del docente
+    const resMat  = await fetch(API + '/docente/materias?id_docente=' + docenteData.id_docente, { signal: AbortSignal.timeout(6000) });
+    const dataMat = await resMat.json();
+    const materias = (dataMat.materias || []).filter(m => {
+      if (cuatrimestre === 'anual') return m.formato === 'anual';
+      return m.formato === 'cuatrimestral' && String(m.cuatrimestre) === cuatrimestre;
+    });
+
+    // 2. Traer alumnos de cada materia en paralelo
+    await Promise.all(materias.map(async m => {
+      const params = new URLSearchParams({ id_materia: m.id_materia, anio_cursada: anio, cuatrimestre_cursada: cuatrimestre });
+      const res    = await fetch(API + '/docente/cursadas?' + params, { signal: AbortSignal.timeout(8000) });
+      const data   = await res.json();
+      datosCargados[m.id_materia] = { materia: m, alumnos: data.alumnos || [] };
+    }));
+
+    renderTodo(materias);
+  } catch {
+    document.getElementById('contenido').innerHTML =
+      '<div class="alert alert-error"><span>✕</span><span>Error al cargar datos.</span></div>';
+  } finally {
+    document.getElementById('cargando').style.display  = 'none';
+    document.getElementById('contenido').style.display = 'block';
+  }
+}
+
+function renderTodo(materias) {
+  const cont = document.getElementById('contenido');
+  if (!materias.length) {
+    cont.innerHTML = `
+      <div class="empty-state card" style="padding:40px">
+        <div class="empty-state-icon">📚</div>
+        <p>No tenés materias asignadas para este período.</p>
+      </div>`;
+    return;
+  }
+
+  // Agrupar por carrera
+  const porCarrera = {};
+  materias.forEach(m => {
+    if (!porCarrera[m.nombre_carrera]) porCarrera[m.nombre_carrera] = [];
+    porCarrera[m.nombre_carrera].push(m);
+  });
+
+  cont.innerHTML = Object.entries(porCarrera).map(([carrera, mats]) => `
+    <div class="card">
+      <div class="carrera-titulo">${esc(carrera)}</div>
+      ${mats.map(m => renderMateria(m)).join('')}
+    </div>
+  `).join('');
+}
+
+function renderMateria(m) {
+  const { alumnos } = datosCargados[m.id_materia] || { alumnos: [] };
+
+  function estadoInscripcion(estado) {
+    return {
+      habilitado: '<span class="pill pill-aprobado">En curso</span>',
+      pendiente:  '<span class="pill pill-pendiente">Pendiente</span>',
+      observado:  '<span class="pill pill-observado">Observado</span>',
+      rechazado:  '<span class="pill pill-rechazado">No habilitado</span>',
+    }[estado] || '<span class="text-muted">—</span>';
+  }
+
+  const resultadoPill = r => ({
+    aprobado:    '<span class="pill pill-aprobado">Aprobado</span>',
+    desaprobado: '<span class="pill pill-rechazado">Desaprobado</span>',
+    promocion:   '<span class="pill" style="background:#e8f5ff;color:#1a6fa8">Promoción</span>',
+    ausente:     '<span class="pill pill-pendiente">Ausente</span>',
+    abandono:    '<span class="pill pill-rechazado">Abandono</span>',
+  }[r] || '<span class="text-muted">Sin resultado</span>');
+
+  return `
+    <div class="materia-bloque">
+      <div class="materia-header">
+        <div>
+          <div class="materia-titulo">${esc(m.nombre_materia)}</div>
+          <div class="materia-meta">${esc(m.codigo_materia || '')} · ${alumnos.length} alumno${alumnos.length !== 1 ? 's' : ''} inscripto${alumnos.length !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+      ${!alumnos.length ? `
+        <div class="empty-state" style="padding:20px">
+          <p class="text-sm text-muted">No hay alumnos inscriptos en esta materia para el período seleccionado.</p>
+        </div>
+      ` : `
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Alumno</th>
+                <th>DNI</th>
+                <th>Estado</th>
+                <th>Resultado cursada</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${alumnos.map(a => `
+                <tr>
+                  <td>
+                    <div class="td-name">${esc(a.apellido)}, ${esc(a.nombre)}</div>
+                    <div class="td-sub">${esc(a.correo || '')}</div>
+                  </td>
+                  <td>${esc(a.dni)}</td>
+                  <td>${estadoInscripcion(a.estado_secretaria)}</td>
+                  <td>${resultadoPill(a.resultado_cursada)}</td>
+                  <td>
+                    <select class="resultado-select" id="sel-${a.id_inscripcion_materia}">
+                      <option value="">— Sin cambio —</option>
+                      <option value="aprobado"    ${a.resultado_cursada==='aprobado'    ?'selected':''}>Aprobado</option>
+                      <option value="desaprobado" ${a.resultado_cursada==='desaprobado' ?'selected':''}>Desaprobado</option>
+                      <option value="promocion"   ${a.resultado_cursada==='promocion'   ?'selected':''}>Promoción</option>
+                      <option value="ausente"     ${a.resultado_cursada==='ausente'     ?'selected':''}>Ausente</option>
+                      <option value="abandono"    ${a.resultado_cursada==='abandono'    ?'selected':''}>Abandono</option>
+                    </select>
+                  </td>
+                  <td>
+                    <button class="btn btn-primary" style="padding:6px 14px;font-size:13px"
+                      onclick="guardarResultado(${a.id_inscripcion_materia},'${esc(a.apellido)} ${esc(a.nombre)}')">
+                      Guardar
+                    </button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+async function guardarResultado(idInscripcion, nombre) {
+  const sel       = document.getElementById('sel-' + idInscripcion);
+  const resultado = sel?.value;
+  if (!resultado) return;
+
+  const ok = await confirmar({
+    titulo:  'Guardar resultado',
+    mensaje: `¿Confirmás cargar "${resultado}" para ${nombre}?`,
+    btnOk:   'Sí, guardar'
+  });
+  if (!ok) return;
+
+  try {
+    const res  = await fetch(API + '/docente/cursadas/resultado', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_inscripcion_materia: idInscripcion, resultado }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) await cargarTodo();
+    else alert(data.error || 'Error al guardar.');
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+</script>
+</body>
+</html>

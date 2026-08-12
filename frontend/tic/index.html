@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Área TIC — IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .tab-btn {
+      padding: 10px 18px; font-size: 14px; font-weight: 600;
+      border: none; background: none; cursor: pointer;
+      color: var(--text-3); border-bottom: 3px solid transparent;
+      margin-bottom: -2px; transition: color .15s, border-color .15s;
+      font-family: inherit;
+    }
+    .tab-btn:hover { color: var(--primary); }
+    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 0; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Panel Área TIC</div>
+      </div>
+    </div>
+    <nav class="header-nav" id="headerNav">
+      <a class="btn btn-secondary" href="/inicio/">← Menú principal</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <!-- Login -->
+  <div class="card card-sm" id="loginCard">
+    <h2 class="card-title">Acceso Área TIC</h2>
+    <p class="card-subtitle">Ingresá la contraseña de acceso al panel.</p>
+    <div class="grid" style="gap:14px">
+      <div class="field">
+        <label class="field-label" for="password">Contraseña</label>
+        <input id="password" type="password" placeholder="Contraseña de TIC" autocomplete="current-password">
+      </div>
+      <div id="loginStatus" class="alert" style="display:none"></div>
+      <button id="btnLogin" class="btn btn-primary btn-full" onclick="login()">Ingresar</button>
+    </div>
+  </div>
+
+  <!-- Panel -->
+  <div id="panel" style="display:none">
+    <div class="page-hero">
+      <h1>Área TIC</h1>
+      <p>Gestión de alumnos en la plataforma institucional.</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-2" style="gap:16px;margin-bottom:20px" id="statsRow"></div>
+
+    <!-- Pestañas -->
+    <div class="tabs" style="margin-bottom:0">
+      <button class="tab-btn active" id="nav-ingresantes" onclick="cambiarTab('ingresantes')">
+        🎓 Ingresantes
+        <span id="badgeIngresantes" style="display:none;background:var(--warn);color:#fff;border-radius:999px;font-size:11px;padding:1px 7px;margin-left:6px"></span>
+      </button>
+      <button class="tab-btn" id="nav-materias" onclick="cambiarTab('materias')">
+        📚 Nuevas materias
+        <span id="badgeMaterias" style="display:none;background:var(--warn);color:#fff;border-radius:999px;font-size:11px;padding:1px 7px;margin-left:6px"></span>
+      </button>
+    <button class="tab-btn" id="nav-passwords" onclick="cambiarTab('passwords')">
+      Contraseñas
+    </button>
+    </div>
+
+    <!-- Sección ingresantes -->
+    <div id="secIngresantes" class="card" style="border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
+      <div class="filter-bar">
+        <input type="search" id="busqueda" placeholder="Buscar por nombre, DNI o carrera..." oninput="filtrar()">
+        <select id="filtroEstado" onchange="filtrar()" style="max-width:200px">
+          <option value="">Todos</option>
+          <option value="aprobado_secretaria">Pendientes de carga</option>
+          <option value="cargado_plataforma">Ya cargados</option>
+        </select>
+        <button class="btn btn-secondary" onclick="cargar()">⟳ Actualizar</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Estudiante</th>
+              <th>DNI</th>
+              <th>Profesorado/s</th>
+              <th>Materias asignadas</th>
+              <th>Estado</th>
+              <th>Fecha carga</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div id="emptyState" class="empty-state" style="display:none">
+          <div class="empty-state-icon">💻</div>
+          <p>No hay estudiantes con ese criterio.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sección nuevas materias -->
+    <div id="secMaterias" class="card" style="display:none;border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
+      <div class="filter-bar">
+        <input type="search" id="busquedaMat" placeholder="Buscar por nombre o DNI..." oninput="filtrarMaterias()">
+        <button class="btn btn-secondary" onclick="cargarMaterias()">⟳ Actualizar</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Estudiante</th>
+              <th>DNI</th>
+              <th>Materia</th>
+              <th>Profesorado</th>
+              <th>Estado</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyMat"></tbody>
+        </table>
+        <div id="emptyStateMat" class="empty-state" style="display:none">
+          <div class="empty-state-icon">📚</div>
+          <p>No hay materias pendientes de carga.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<!-- Modal confirmación -->
+<div id="secPasswords" class="card" style="display:none;border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
+  <p class="text-sm text-muted" style="margin-bottom:16px">Reseteá la contraseña de un docente o un alumno usando su DNI.</p>
+  <div class="grid" style="gap:14px;max-width:420px">
+    <div class="field">
+      <label class="field-label" for="resetTipo">Tipo de usuario</label>
+      <select id="resetTipo">
+        <option value="docente">Docente</option>
+        <option value="alumno">Alumno</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="field-label" for="resetDni">DNI</label>
+      <input id="resetDni" type="text" placeholder="Sin puntos, ej: 35123456" inputmode="numeric" maxlength="8">
+    </div>
+    <div class="field">
+      <label class="field-label" for="resetPasswordNueva">Nueva contraseña</label>
+      <input id="resetPasswordNueva" type="password" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label class="field-label" for="resetClaveTic">Clave de TIC</label>
+      <input id="resetClaveTic" type="password" placeholder="Tu clave de acceso a TIC" autocomplete="current-password">
+    </div>
+  </div>
+  <div id="resetStatus" class="alert" style="display:none;margin-top:12px;max-width:420px"></div>
+  <button class="btn btn-primary" id="btnResetPassword" style="margin-top:16px" onclick="resetearPassword()">Resetear contraseña</button>
+</div>
+
+<div class="modal-overlay hidden" id="modalConfirm">
+  <div class="modal">
+    <h3 class="modal-title" id="modalConfirmTitle">¿Confirmar acción?</h3>
+    <p class="modal-body text-sm text-muted" id="modalConfirmMsg"></p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modalConfirmCancel">Cancelar</button>
+      <button class="btn btn-primary" id="modalConfirmOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal observaciones -->
+<div class="modal-overlay hidden" id="modalObs">
+  <div class="modal">
+    <h3 class="modal-title" id="modalObsTitle">Observaciones TIC</h3>
+    <div class="modal-body">
+      <textarea id="modalObsText" rows="3" style="resize:vertical;width:100%" placeholder="Observaciones opcionales..."></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modalObsCancel">Cancelar</button>
+      <button class="btn btn-ok" id="modalObsOk">Marcar como cargado</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+<script>
+let todos = [];
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('loginCard').style.display !== 'none') login();
+});
+
+async function login() {
+  const password = document.getElementById('password').value;
+  const status   = document.getElementById('loginStatus');
+  const btn      = document.getElementById('btnLogin');
+  clearStatus(status);
+  if (!password) return setStatus(status, 'Ingresá la contraseña.', 'warn');
+
+  setLoading(btn, true, 'Ingresando...');
+  try {
+    const res  = await fetch(API + '/tic/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+      signal: AbortSignal.timeout(6000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      sessionStorage.setItem('tic_auth', '1');
+      document.getElementById('loginCard').style.display = 'none';
+      document.getElementById('panel').style.display = 'block';
+      document.getElementById('headerNav').innerHTML = `
+        <span class="text-sm text-muted">Área TIC</span>
+        <button class="btn btn-secondary" onclick="cerrarSesion()">Salir</button>
+        <a class="btn btn-secondary" href="/inicio/">Menú</a>
+      `;
+      await cargar();
+    } else {
+      setStatus(status, data.error || 'Contraseña incorrecta.', 'error');
+    }
+  } catch {
+    setStatus(status, 'No se pudo conectar con el servidor.', 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+function cerrarSesion() {
+  sessionStorage.removeItem('tic_auth');
+  window.location.reload();
+}
+
+if (sessionStorage.getItem('tic_auth')) {
+  document.getElementById('loginCard').style.display = 'none';
+  document.getElementById('panel').style.display = 'block';
+  cargar();
+}
+
+async function cargar() {
+  try {
+    const res = await fetch(API + '/tic/estudiantes', { signal: AbortSignal.timeout(8000) });
+    todos = await res.json();
+    renderStats();
+    filtrar();
+    // Badge ingresantes pendientes
+    const pend = todos.filter(r => r.estado_general === 'aprobado_secretaria').length;
+    const badge = document.getElementById('badgeIngresantes');
+    if (pend > 0) { badge.textContent = pend; badge.style.display = 'inline'; }
+    else badge.style.display = 'none';
+  } catch {
+    document.getElementById('tbody').innerHTML = `<tr><td colspan="7" class="text-center text-muted">Error al cargar datos.</td></tr>`;
+  }
+}
+
+function renderStats() {
+  const pendientes = todos.filter(r => r.estado_general === 'aprobado_secretaria').length;
+  const cargados   = todos.filter(r => r.estado_general === 'cargado_plataforma').length;
+
+  document.getElementById('statsRow').innerHTML = `
+    <div class="card" style="margin:0;background:var(--warn-bg);border-color:#f5dcb0">
+      <div style="font-size:28px;font-weight:700;color:var(--warn)">${pendientes}</div>
+      <div class="text-sm text-muted">Pendientes de carga</div>
+    </div>
+    <div class="card" style="margin:0;background:var(--ok-bg);border-color:#b6e2cf">
+      <div style="font-size:28px;font-weight:700;color:var(--ok)">${cargados}</div>
+      <div class="text-sm text-muted">Ya cargados en plataforma</div>
+    </div>
+  `;
+}
+
+function filtrar() {
+  const busq   = document.getElementById('busqueda').value.toLowerCase();
+  const estado = document.getElementById('filtroEstado').value;
+  const datos  = todos.filter(r => {
+    const texto = `${r.apellido} ${r.nombre} ${r.dni} ${r.nombre_carrera}`.toLowerCase();
+    return (!busq || texto.includes(busq)) && (!estado || r.estado_general === estado);
+  });
+  renderTabla(datos);
+}
+
+function renderTabla(datos) {
+  const tb    = document.getElementById('tbody');
+  const empty = document.getElementById('emptyState');
+
+  if (!datos.length) {
+    tb.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tb.innerHTML = datos.map(r => {
+    const esCargado = r.estado_general === 'cargado_plataforma';
+    const fechaCarga = r.fecha_carga_plataforma
+      ? new Date(r.fecha_carga_plataforma).toLocaleDateString('es-AR')
+      : '—';
+    const accion = esCargado
+      ? `<span class="pill pill-cargado">✓ Cargado</span>`
+      : `<button class="btn btn-ok" style="padding:6px 14px;font-size:13px" onclick="marcar(${r.id_estudiante},'${esc(r.apellido)} ${esc(r.nombre)}')">Marcar cargado</button>`;
+
+    // Carreras del estudiante
+    const carreras = r.carreras && r.carreras.length
+      ? r.carreras.map(c => `<div class="text-sm">${esc(c.nombre_carrera)}</div>`).join('')
+      : `<div class="text-sm">${esc(r.nombre_carrera)}</div>`;
+
+    // Materias del estudiante
+    const materias = r.materias && r.materias.length
+      ? `<div style="display:flex;flex-wrap:wrap;gap:4px">
+          ${r.materias.map(m => `
+            <span class="pill" style="background:var(--primary-light);color:var(--primary);font-size:11px">
+              ${esc(m.nombre_materia)}
+            </span>`).join('')}
+         </div>`
+      : '<span class="text-sm text-muted">Sin materias</span>';
+
+    return `
+      <tr>
+        <td>
+          <div class="td-name">${esc(r.apellido)}, ${esc(r.nombre)}</div>
+          <div class="td-sub">${r.correo ? esc(r.correo) : '—'}</div>
+        </td>
+        <td>${esc(r.dni)}</td>
+        <td>${carreras}</td>
+        <td>${materias}</td>
+        <td>${estadoPill(r.estado_general)}</td>
+        <td class="text-sm text-muted">${fechaCarga}</td>
+        <td>${accion}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function cambiarTab(tab) {
+  document.getElementById('secIngresantes').style.display = tab === 'ingresantes' ? 'block' : 'none';
+  document.getElementById('secMaterias').style.display    = tab === 'materias'    ? 'block' : 'none';
+  document.getElementById('secPasswords').style.display   = tab === 'passwords'   ? 'block' : 'none';
+  document.getElementById('nav-ingresantes').classList.toggle('active', tab === 'ingresantes');
+  document.getElementById('nav-materias').classList.toggle('active',    tab === 'materias');
+  document.getElementById('nav-passwords').classList.toggle('active',   tab === 'passwords');
+  if (tab === 'materias') cargarMaterias();
+}
+
+async function resetearPassword() {
+  const tipo = document.getElementById('resetTipo').value;
+  const dni = document.getElementById('resetDni').value.trim();
+  const passwordNueva = document.getElementById('resetPasswordNueva').value.trim();
+  const claveTic = document.getElementById('resetClaveTic').value.trim();
+  const status = document.getElementById('resetStatus');
+  const btn = document.getElementById('btnResetPassword');
+
+  clearStatus(status);
+  if (!dni || !passwordNueva || !claveTic) return setStatus(status, 'Completá todos los campos.', 'warn');
+  if (passwordNueva.length < 6) return setStatus(status, 'La nueva contraseña debe tener al menos 6 caracteres.', 'warn');
+
+  const ruta = tipo === 'docente' ? '/tic/reset-password-docente' : '/tic/reset-password-alumno';
+
+  setLoading(btn, true, 'Reseteando...');
+  try {
+    const res = await fetch(API + ruta, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: claveTic, dni, password_nueva: passwordNueva }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      setStatus(status, data.mensaje || 'Contraseña actualizada correctamente.', 'ok');
+      document.getElementById('resetDni').value = '';
+      document.getElementById('resetPasswordNueva').value = '';
+      document.getElementById('resetClaveTic').value = '';
+    } else {
+      setStatus(status, data.error || 'No se pudo resetear la contraseña.', 'error');
+    }
+  } catch {
+    setStatus(status, 'No se pudo conectar con el servidor.', 'error');
+  } finally {
+    setLoading(btn, false, 'Resetear contraseña');
+  }
+}
+
+let todasMaterias = [];
+
+async function cargarMaterias() {
+  try {
+    const res  = await fetch(API + '/tic/nuevas-materias', { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    todasMaterias = data.materias || [];
+
+    // Badge
+    const badge = document.getElementById('badgeMaterias');
+    if (todasMaterias.length > 0) { badge.textContent = todasMaterias.length; badge.style.display = 'inline'; }
+    else badge.style.display = 'none';
+
+    filtrarMaterias();
+  } catch {
+    document.getElementById('tbodyMat').innerHTML =
+      `<tr><td colspan="6" class="text-center text-muted">Error al cargar.</td></tr>`;
+  }
+}
+
+function filtrarMaterias() {
+  const busq  = document.getElementById('busquedaMat').value.toLowerCase();
+  const datos = todasMaterias.filter(r =>
+    `${r.apellido} ${r.nombre} ${r.dni}`.toLowerCase().includes(busq)
+  );
+  renderMaterias(datos);
+}
+
+function renderMaterias(datos) {
+  const tb    = document.getElementById('tbodyMat');
+  const empty = document.getElementById('emptyStateMat');
+  if (!datos.length) { tb.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  tb.innerHTML = datos.map(r => `
+    <tr>
+      <td>
+        <div class="td-name">${esc(r.apellido)}, ${esc(r.nombre)}</div>
+        <div class="td-sub">${r.correo ? esc(r.correo) : '—'}</div>
+      </td>
+      <td>${esc(r.dni)}</td>
+      <td><strong>${esc(r.nombre_materia)}</strong></td>
+      <td class="text-sm">${esc(r.nombre_carrera)}</td>
+      <td><span class="pill pill-pendiente">Pendiente carga</span></td>
+      <td>
+        <button class="btn btn-ok" style="padding:6px 14px;font-size:13px"
+          onclick="marcarMateria(${r.id_inscripcion_materia}, '${esc(r.apellido)} ${esc(r.nombre)}', '${esc(r.nombre_materia)}')">
+          Marcar cargada
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function marcarMateria(idInscripcion, nombre, materia) {
+  const ok = await confirmar({
+    titulo:  'Marcar como cargada',
+    mensaje: `¿Confirmás que ${nombre} fue dado de alta en la materia "${materia}" en la plataforma?`,
+    btnOk:   'Sí, marcar'
+  });
+  if (!ok) return;
+
+  try {
+    const res  = await fetch(API + '/tic/cargar-materia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_inscripcion_materia: idInscripcion }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) await cargarMaterias();
+    else alert(data.error || 'Error al registrar.');
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+
+async function marcar(id, nombre) {
+  const observaciones = await pedirObservaciones({
+    titulo: `Marcar cargado: ${nombre}`,
+    placeholder: 'Observaciones de carga (opcional)...'
+  });
+  if (observaciones === null) return;
+
+  try {
+    const res  = await fetch(API + '/tic/cargar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_estudiante: id, observaciones }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) await cargar();
+    else alert(data.error || 'Error al registrar la carga.');
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+</script>
+</body>
+</html>

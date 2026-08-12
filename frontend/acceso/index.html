@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acceso estudiante — IFDC</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Sistema de Gestión Académica</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <a class="btn btn-secondary" href="/inicio/">← Menú principal</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="card card-sm">
+    <h2 class="card-title">Ingreso estudiante</h2>
+    <p class="card-subtitle">Ingresá con tu DNI y contraseña. Si es tu primera vez, tu contraseña es tu número de DNI.</p>
+
+    <div class="grid" style="gap:14px">
+
+      <div class="field">
+        <label class="field-label" for="dni">DNI</label>
+        <input id="dni" type="text" placeholder="Sin puntos, ej: 35123456"
+               inputmode="numeric" maxlength="8" autocomplete="username">
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="password">Contraseña</label>
+        <input id="password" type="password" placeholder="Tu contraseña" autocomplete="current-password">
+        <span class="text-sm text-muted">Si es tu primera vez, tu contraseña es tu DNI.</span>
+      </div>
+
+      <div id="status" class="alert" style="display:none"></div>
+
+      <button id="btnLogin" class="btn btn-primary btn-full" onclick="login()">Ingresar</button>
+
+      <div class="divider"></div>
+
+      <p class="text-sm text-muted text-center">
+        ¿No te registraste todavía?
+        <a href="/inscripcion/" style="color:var(--primary);font-weight:600">Completá tu inscripción aquí.</a>
+      </p>
+
+    </div>
+  </div>
+</main>
+
+<script src="/app.js"></script>
+<script>
+// Si ya tiene sesión, ir al panel
+if (localStorage.getItem('estudiante_dni')) {
+  window.location.replace('/panel/');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') login();
+});
+
+async function login() {
+  const dni      = document.getElementById('dni').value.trim();
+  const password = document.getElementById('password').value.trim();
+  const status   = document.getElementById('status');
+  const btn      = document.getElementById('btnLogin');
+
+  clearStatus(status);
+
+  if (!dni || !password) return setStatus(status, 'Ingresá tu DNI y contraseña.', 'warn');
+  if (!validarDNI(dni))  return setStatus(status, 'El DNI debe tener 7 u 8 dígitos numéricos.', 'warn');
+
+  setLoading(btn, true, 'Ingresando...');
+  try {
+    const res  = await fetch(API + '/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dni, password }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      localStorage.setItem('estudiante_dni', dni);
+      window.location.replace('/panel/');
+    } else {
+      setStatus(status, data.error || 'DNI o contraseña incorrectos.', 'error');
+    }
+  } catch {
+    setStatus(status, 'No se pudo conectar con el servidor.', 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+</script>
+</body>
+</html>

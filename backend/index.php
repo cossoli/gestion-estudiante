@@ -521,6 +521,42 @@ if ($path === '/tic/reset-password-alumno' && $_SERVER['REQUEST_METHOD'] === 'PO
         respond(['ok' => true, 'message' => 'Estudiante marcado como cargado en plataforma.']);
     }
 
+    // --- Panel TIC: habilitar/deshabilitar cuenta de estudiante ---
+    if ($path === '/tic/estudiante/deshabilitar' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data       = json_input();
+        $studentId  = (int) ($data['id_estudiante'] ?? 0);
+        $activo     = filter_var($data['activo'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        if ($studentId === 0) {
+            respond(['ok' => false, 'error' => 'Falta el estudiante.'], 400);
+        }
+
+        $pdo->beginTransaction();
+
+        $stmt = $pdo->prepare(
+            "SELECT id_usuario FROM estudiantes WHERE id_estudiante = ?"
+        );
+        $stmt->execute([$studentId]);
+        $row = $stmt->fetch();
+
+        if (!$row) {
+            $pdo->rollBack();
+            respond(['ok' => false, 'error' => 'Estudiante no encontrado.'], 404);
+        }
+
+        $pdo->prepare("UPDATE usuarios SET activo = ? WHERE id_usuario = ?")
+            ->execute([$activo, $row['id_usuario']]);
+
+        $pdo->commit();
+
+        respond([
+            'ok' => true,
+            'message' => $activo
+                ? 'Cuenta habilitada correctamente.'
+                : 'Cuenta deshabilitada correctamente.'
+        ]);
+    }
+
     // ── Panel alumno: materias inscriptas agrupadas por carrera ─────────────
     if ($path === '/alumno/materias' && $_SERVER['REQUEST_METHOD'] === 'GET') {
         $dni = trim($_GET['dni'] ?? '');
@@ -814,6 +850,8 @@ if ($path === '/tic/reset-password-alumno' && $_SERVER['REQUEST_METHOD'] === 'PO
                AND cu.id_materia = im.id_materia
                AND cu.anio_cursada = im.anio_lectivo
              WHERE im.id_materia = ? AND im.anio_lectivo = ?
+              AND im.estado_secretaria = 'habilitado'
+              AND (cu.resultado IS NULL OR cu.resultado != 'aprobado')
              ORDER BY e.apellido, e.nombre"
         );
         $stmtAlumnos->execute([$idMateria, $anio]);
@@ -854,6 +892,8 @@ if ($path === '/tic/reset-password-alumno' && $_SERVER['REQUEST_METHOD'] === 'PO
                AND cu.id_materia = im.id_materia
                AND cu.anio_cursada = im.anio_lectivo
              WHERE im.id_materia = ? AND im.anio_lectivo = ?
+              AND im.estado_secretaria = 'habilitado'
+              AND (cu.resultado IS NULL OR cu.resultado != 'aprobado')
              ORDER BY e.apellido, e.nombre"
         );
         $stmtAlumnos->execute([$idMateria, $anio]);
@@ -1145,6 +1185,8 @@ if ($path === '/docente/cambiar-password' && $_SERVER['REQUEST_METHOD'] === 'POS
                AND cu.id_materia = im.id_materia
                AND cu.anio_cursada = im.anio_lectivo
              WHERE im.id_materia = ? AND im.anio_lectivo = ?
+          AND im.estado_secretaria = 'habilitado'
+          AND (cu.resultado IS NULL OR cu.resultado != 'aprobado')
              ORDER BY e.apellido, e.nombre"
         );
         $stmt->execute([$idMateria, $anioLectivo]);
@@ -1308,6 +1350,65 @@ if ($path === '/tic/nuevas-materias' && $_SERVER['REQUEST_METHOD'] === 'GET') {
                AND e.estado_general IN ('aprobado_secretaria','cargado_plataforma')
              ORDER BY e.apellido, e.nombre, m.nombre_materia"
         );
+        respond(['ok' => true, 'materias' => $stmt->fetchAll()]);
+    }
+
+    // -- TIC: inscriptos actuales por materia (en curso) --
+    // -- TIC: materias de un profesorado --
+    if ($path === '/tic/materias-por-carrera' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $idCarrera = (int) ($_GET['id_carrera'] ?? 0);
+        if ($idCarrera === 0) respond(['ok' => false, 'error' => 'Falta id_carrera.'], 400);
+
+        $stmt = $pdo->prepare(
+            "SELECT id_materia, nombre_materia
+             FROM materias
+             WHERE id_carrera = ?
+             ORDER BY nombre_materia"
+        );
+        $stmt->execute([$idCarrera]);
+        respond(['ok' => true, 'materias' => $stmt->fetchAll()]);
+    }
+
+    // -- TIC: alumnos inscriptos (en curso) de una materia especifica --
+    if ($path === '/tic/alumnos-por-materia' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $idMateria = (int) ($_GET['id_materia'] ?? 0);
+        if ($idMateria === 0) respond(['ok' => false, 'error' => 'Falta id_materia.'], 400);
+
+        $stmt = $pdo->prepare(
+            "SELECT e.apellido, e.nombre, e.dni, e.correo
+             FROM inscripciones_materias im
+             JOIN estudiantes e ON e.id_estudiante = im.id_estudiante
+             WHERE im.id_materia = ?
+               AND im.estado_secretaria = 'habilitado'
+             ORDER BY e.apellido, e.nombre"
+        );
+        $stmt->execute([$idMateria]);
+        $alumnos = $stmt->fetchAll();
+        respond(['ok' => true, 'alumnos' => $alumnos, 'cantidad' => count($alumnos)]);
+    }
+
+    if ($path === '/tic/inscriptos-por-materia' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $idCarrera = (int) ($_GET['id_carrera'] ?? 0);
+
+        $sql = "SELECT c.nombre_carrera, m.nombre_materia, m.id_materia,
+                       COUNT(im.id_inscripcion_materia) AS inscriptos
+                FROM materias m
+                JOIN carreras c ON c.id_carrera = m.id_carrera
+                LEFT JOIN inscripciones_materias im
+                    ON im.id_materia = m.id_materia
+                   AND im.estado_secretaria = 'habilitado'";
+
+        $params = [];
+        if ($idCarrera !== 0) {
+            $sql .= " WHERE c.id_carrera = ?";
+            $params[] = $idCarrera;
+        }
+
+        $sql .= " GROUP BY c.nombre_carrera, m.nombre_materia, m.id_materia
+                  ORDER BY c.nombre_carrera, m.nombre_materia";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
         respond(['ok' => true, 'materias' => $stmt->fetchAll()]);
     }
 
@@ -1559,6 +1660,47 @@ if ($path === '/tic/nuevas-materias' && $_SERVER['REQUEST_METHOD'] === 'GET') {
         }
         unset($doc);
         respond(['ok' => true, 'docentes' => $docentes]);
+    }
+
+
+    // TIC: generar y descargar backup de la base de datos
+    if ($path === '/tic/backup-db' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_input();
+        $password = trim($data['password'] ?? '');
+        if ($password !== getenv('TIC_PASSWORD')) {
+            respond(['ok' => false, 'error' => 'Clave de TIC incorrecta.'], 401);
+        }
+
+        $dbHost = getenv('DB_HOST') ?: 'db';
+        $dbName = getenv('DB_NAME') ?: 'ifdc';
+        $dbUser = getenv('DB_USER') ?: 'ifdc_user';
+        $dbPass = getenv('DB_PASS') ?: 'ifdc_pass';
+
+        $fecha = date('Ymd_His');
+        $nombreArchivo = "sysifdc_db_{$fecha}.sql";
+        $rutaArchivo = "/tmp/{$nombreArchivo}";
+
+        putenv("PGPASSWORD={$dbPass}");
+        $comando = sprintf(
+            'pg_dump -h %s -U %s -d %s > %s 2>&1',
+            escapeshellarg($dbHost),
+            escapeshellarg($dbUser),
+            escapeshellarg($dbName),
+            escapeshellarg($rutaArchivo)
+        );
+        exec($comando, $salida, $codigoRetorno);
+        putenv('PGPASSWORD');
+
+        if ($codigoRetorno !== 0 || !file_exists($rutaArchivo)) {
+            respond(['ok' => false, 'error' => 'No se pudo generar el backup.'], 500);
+        }
+
+        header('Content-Type: application/sql');
+        header('Content-Disposition: attachment; filename="' . $nombreArchivo . '"');
+        header('Content-Length: ' . filesize($rutaArchivo));
+        readfile($rutaArchivo);
+        unlink($rutaArchivo);
+        exit;
     }
 
     respond(['ok' => false, 'error' => 'Ruta no encontrada.'], 404);

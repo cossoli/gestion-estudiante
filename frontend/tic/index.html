@@ -74,6 +74,10 @@
     <button class="tab-btn" id="nav-passwords" onclick="cambiarTab('passwords')">
       Contraseñas
     </button>
+    <button class="tab-btn" id="nav-backup" onclick="cambiarTab('backup')">
+      Backup
+    </button>
+      <button class="tab-btn" id="nav-inscriptos" onclick="cambiarTab('inscriptos')">Inscriptos por materia</button>
     </div>
 
     <!-- Sección ingresantes -->
@@ -99,6 +103,7 @@
               <th>Estado</th>
               <th>Fecha carga</th>
               <th>Acción</th>
+              <th>Cuenta</th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -142,7 +147,49 @@
 </main>
 
 <!-- Modal confirmación -->
-<div id="secPasswords" class="card" style="display:none;border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
+  <div id="secInscriptos" class="card" style="display:none;border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
+    <div class="grid" style="gap:14px;max-width:600px">
+      <div class="field">
+        <label>Profesorado</label>
+        <select id="selCarreraInsc" onchange="onCambioCarreraInsc()" style="padding:8px;border-radius:8px;border:1px solid var(--border);width:100%">
+          <option value="0">Seleccionar profesorado...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Materia</label>
+        <select id="selMateriaInsc" onchange="onCambioMateriaInsc()" style="padding:8px;border-radius:8px;border:1px solid var(--border);width:100%" disabled>
+          <option value="0">Primero elegí un profesorado</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="detalleInscriptos" style="margin-top:20px;display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <strong id="tituloMateriaInsc" style="font-size:16px"></strong>
+        <span class="pill pill-aprobado" id="cantidadInsc"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Apellido</th>
+              <th>Nombre</th>
+              <th>DNI</th>
+              <th>Correo</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyAlumnosInsc"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="emptyStateInsc" class="empty-state" style="display:none">
+      <div class="empty-state-icon"></div>
+      <p>Elegí un profesorado y una materia para ver los inscriptos.</p>
+    </div>
+  </div>
+
+  <div id="secPasswords" class="card" style="display:none;border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
   <p class="text-sm text-muted" style="margin-bottom:16px">Reseteá la contraseña de un docente o un alumno usando su DNI.</p>
   <div class="grid" style="gap:14px;max-width:420px">
     <div class="field">
@@ -169,7 +216,18 @@
   <button class="btn btn-primary" id="btnResetPassword" style="margin-top:16px" onclick="resetearPassword()">Resetear contraseña</button>
 </div>
 
-<div class="modal-overlay hidden" id="modalConfirm">
+<div id="secBackup" class="card" style="display:none;border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
+    <h3 style="margin-top:0">Backup de la base de datos</h3>
+    <p class="text-sm text-muted">Genera y descarga una copia completa de la base de datos del sistema (estudiantes, materias, docentes, cursadas).</p>
+    <div class="field">
+      <label class="field-label" for="backupClaveTic">Clave de TIC</label>
+      <input id="backupClaveTic" type="password" placeholder="Tu clave de acceso a TIC" autocomplete="current-password">
+    </div>
+    <div id="backupStatus" class="alert" style="display:none;margin-top:12px;max-width:420px"></div>
+    <button class="btn btn-primary" id="btnBackupDb" style="margin-top:16px" onclick="generarBackup()">Generar y descargar backup</button>
+  </div>
+
+  <div class="modal-overlay hidden" id="modalConfirm">
   <div class="modal">
     <h3 class="modal-title" id="modalConfirmTitle">¿Confirmar acción?</h3>
     <p class="modal-body text-sm text-muted" id="modalConfirmMsg"></p>
@@ -338,19 +396,50 @@ function renderTabla(datos) {
         <td>${estadoPill(r.estado_general)}</td>
         <td class="text-sm text-muted">${fechaCarga}</td>
         <td>${accion}</td>
+        <td>
+          <button class="btn ${r.cuenta_activa === false ? 'btn-ok' : 'btn-danger'}" style="padding:6px 14px;font-size:13px" onclick="toggleCuenta(${r.id_estudiante}, '${esc(r.apellido)} ${esc(r.nombre)}', ${r.cuenta_activa === false ? 'true' : 'false'})">${r.cuenta_activa === false ? 'Habilitar' : 'Deshabilitar'}</button>
+        </td>
       </tr>
     `;
   }).join('');
+}
+
+async function toggleCuenta(id, nombre, activar) {
+  const accionTexto = activar ? 'habilitar' : 'deshabilitar';
+  if (!confirm(`¿Seguro que querés ${accionTexto} la cuenta de ${nombre}?`)) return;
+
+  try {
+    const res = await fetch(API + '/tic/estudiante/deshabilitar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_estudiante: id, activo: activar }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert(data.message || 'Listo.');
+      await cargar();
+    } else {
+      alert(data.error || 'Error al actualizar la cuenta.');
+    }
+  } catch {
+    alert('No se pudo conectar con el servidor.');
+  }
 }
 
 function cambiarTab(tab) {
   document.getElementById('secIngresantes').style.display = tab === 'ingresantes' ? 'block' : 'none';
   document.getElementById('secMaterias').style.display    = tab === 'materias'    ? 'block' : 'none';
   document.getElementById('secPasswords').style.display   = tab === 'passwords'   ? 'block' : 'none';
+  document.getElementById('secBackup').style.display = tab === 'backup' ? 'block' : 'none';
+  document.getElementById('secInscriptos').style.display = tab === 'inscriptos' ? 'block' : 'none';
   document.getElementById('nav-ingresantes').classList.toggle('active', tab === 'ingresantes');
   document.getElementById('nav-materias').classList.toggle('active',    tab === 'materias');
   document.getElementById('nav-passwords').classList.toggle('active',   tab === 'passwords');
+  document.getElementById('nav-backup').classList.toggle('active', tab === 'backup');
+  document.getElementById('nav-inscriptos').classList.toggle('active', tab === 'inscriptos');
   if (tab === 'materias') cargarMaterias();
+  if (tab === 'inscriptos') inicializarInscriptos();
 }
 
 async function resetearPassword() {
@@ -487,6 +576,136 @@ async function marcar(id, nombre) {
     else alert(data.error || 'Error al registrar la carga.');
   } catch {
     alert('No se pudo conectar con el servidor.');
+  }
+}
+
+async function generarBackup() {
+  const clave = document.getElementById('backupClaveTic').value;
+  const status = document.getElementById('backupStatus');
+  const btn = document.getElementById('btnBackupDb');
+
+  clearStatus(status);
+  if (!clave) return setStatus(status, 'Ingresa la clave de TIC.', 'warn');
+
+  setLoading(btn, true, 'Generando backup...');
+  try {
+    const res = await fetch(API + '/tic/backup-db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: clave }),
+      signal: AbortSignal.timeout(30000)
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setStatus(status, data.error || 'Error al generar el backup.', 'warn');
+      setLoading(btn, false, 'Generar y descargar backup');
+      return;
+    }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    const nombreArchivo = match ? match[1] : 'backup.sql';
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombreArchivo;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+
+    setStatus(status, 'Backup generado y descargado correctamente.', 'ok');
+  } catch {
+    setStatus(status, 'No se pudo conectar con el servidor.', 'warn');
+  }
+  setLoading(btn, false, 'Generar y descargar backup');
+}
+
+let carrerasInscCargadas = false;
+
+async function inicializarInscriptos() {
+  if (carrerasInscCargadas) return;
+  try {
+    const res = await fetch(API + '/carreras', { signal: AbortSignal.timeout(8000) });
+    const carreras = await res.json();
+    const sel = document.getElementById('selCarreraInsc');
+    sel.innerHTML = '<option value="0">Seleccionar profesorado...</option>' +
+      carreras.map(c => `<option value="${c.id_carrera}">${esc(c.nombre_carrera)}</option>`).join('');
+    carrerasInscCargadas = true;
+  } catch (e) {
+    console.error('Error cargando profesorados', e);
+  }
+}
+
+async function onCambioCarreraInsc() {
+  const idCarrera = document.getElementById('selCarreraInsc').value;
+  const selMateria = document.getElementById('selMateriaInsc');
+  document.getElementById('detalleInscriptos').style.display = 'none';
+  document.getElementById('emptyStateInsc').style.display = 'block';
+
+  if (idCarrera === '0') {
+    selMateria.innerHTML = '<option value="0">Primero elegí un profesorado</option>';
+    selMateria.disabled = true;
+    return;
+  }
+
+  selMateria.innerHTML = '<option value="0">Cargando...</option>';
+  selMateria.disabled = true;
+
+  try {
+    const res = await fetch(API + '/tic/materias-por-carrera?id_carrera=' + idCarrera, { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    const materias = data.materias || [];
+    selMateria.innerHTML = '<option value="0">Seleccionar materia...</option>' +
+      materias.map(m => `<option value="${m.id_materia}">${esc(m.nombre_materia)}</option>`).join('');
+    selMateria.disabled = false;
+  } catch (e) {
+    selMateria.innerHTML = '<option value="0">Error al cargar materias</option>';
+  }
+}
+
+async function onCambioMateriaInsc() {
+  const idMateria = document.getElementById('selMateriaInsc').value;
+  const detalle = document.getElementById('detalleInscriptos');
+  const empty = document.getElementById('emptyStateInsc');
+
+  if (idMateria === '0') {
+    detalle.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+
+  const nombreMateria = document.getElementById('selMateriaInsc').selectedOptions[0].textContent;
+  document.getElementById('tituloMateriaInsc').textContent = nombreMateria;
+  document.getElementById('cantidadInsc').textContent = '...';
+  document.getElementById('tbodyAlumnosInsc').innerHTML = '<tr><td colspan="4" class="text-center text-muted">Cargando...</td></tr>';
+  empty.style.display = 'none';
+  detalle.style.display = 'block';
+
+  try {
+    const res = await fetch(API + '/tic/alumnos-por-materia?id_materia=' + idMateria, { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    const alumnos = data.alumnos || [];
+    document.getElementById('cantidadInsc').textContent = data.cantidad + (data.cantidad === 1 ? ' inscripto' : ' inscriptos');
+
+    if (!alumnos.length) {
+      document.getElementById('tbodyAlumnosInsc').innerHTML = '<tr><td colspan="4" class="text-center text-muted">No hay alumnos inscriptos en esta materia.</td></tr>';
+      return;
+    }
+
+    document.getElementById('tbodyAlumnosInsc').innerHTML = alumnos.map(a => `
+      <tr>
+        <td>${esc(a.apellido)}</td>
+        <td>${esc(a.nombre)}</td>
+        <td>${esc(a.dni)}</td>
+        <td class="text-sm">${a.correo ? esc(a.correo) : '—'}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    document.getElementById('tbodyAlumnosInsc').innerHTML = '<tr><td colspan="4" class="text-center text-muted">Error al cargar.</td></tr>';
   }
 }
 </script>

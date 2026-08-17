@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inscriptos por materia — Secretaría</title>
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; max-width:700px; }
+  @media (max-width:600px) { .grid-2 { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Secretaría — Inscriptos por materia</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <a class="btn btn-secondary" href="/secretaria/">&larr; Panel Secretaría</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <div class="card">
+    <div class="actions-bar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <strong>Todas las materias — inscriptos habilitados</strong>
+      <div class="actions" style="gap:8px">
+        <button class="btn btn-secondary" onclick="exportarTodoCSV()">&darr; Exportar CSV</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Profesorado</th>
+            <th>Materia</th>
+            <th>Inscriptos habilitados</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyTodas">
+          <tr><td colspan="3" class="text-center text-muted">Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:20px">
+    <strong>Consultar detalle por materia</strong>
+    <div class="grid-2" style="margin-top:14px">
+      <div class="field">
+        <label>Profesorado</label>
+        <select id="selCarrera" onchange="onCambioCarrera()" style="padding:8px;border-radius:8px;border:1px solid var(--border);width:100%">
+          <option value="0">Seleccionar profesorado...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Materia</label>
+        <select id="selMateria" onchange="onCambioMateria()" style="padding:8px;border-radius:8px;border:1px solid var(--border);width:100%" disabled>
+          <option value="0">Primero elegí un profesorado</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="detalle" style="margin-top:20px;display:none">
+      <div class="actions-bar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <strong id="tituloMateria" style="font-size:16px"></strong>
+          <span class="pill pill-aprobado" id="cantidadDetalle"></span>
+        </div>
+        <div class="actions" style="gap:8px">
+          <button class="btn btn-secondary" onclick="exportarDetalleCSV()">&darr; Exportar CSV</button>
+          <button class="btn btn-primary" onclick="window.print()">&#128424; Imprimir / PDF</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Apellido</th>
+              <th>Nombre</th>
+              <th>DNI</th>
+              <th>Correo</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyDetalle"></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="emptyDetalle" class="empty-state" style="display:block;margin-top:20px">
+      <div class="empty-state-icon">&nbsp;</div>
+      <p>Elegí un profesorado y una materia para ver el detalle.</p>
+    </div>
+  </div>
+
+</main>
+
+<script src="/app.js"></script>
+<script>
+let todasMaterias = [];
+let datosDetalle = null;
+
+async function cargarTodas() {
+  const tb = document.getElementById('tbodyTodas');
+  try {
+    const res = await fetch(API + '/tic/inscriptos-por-materia', { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    todasMaterias = data.materias || [];
+    if (!todasMaterias.length) {
+      tb.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No hay datos.</td></tr>';
+      return;
+    }
+    tb.innerHTML = todasMaterias.map(m => `
+      <tr>
+        <td class="text-sm">${esc(m.nombre_carrera)}</td>
+        <td><strong>${esc(m.nombre_materia)}</strong></td>
+        <td><span class="pill pill-aprobado">${m.inscriptos}</span></td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    tb.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Error al cargar.</td></tr>';
+  }
+}
+
+async function cargarCarreras() {
+  try {
+    const res = await fetch(API + '/carreras', { signal: AbortSignal.timeout(8000) });
+    const carreras = await res.json();
+    const sel = document.getElementById('selCarrera');
+    sel.innerHTML = '<option value="0">Seleccionar profesorado...</option>' +
+      carreras.map(c => `<option value="${c.id_carrera}">${esc(c.nombre_carrera)}</option>`).join('');
+  } catch (e) {
+    console.error('Error cargando profesorados', e);
+  }
+}
+
+async function onCambioCarrera() {
+  const idCarrera = document.getElementById('selCarrera').value;
+  const selMateria = document.getElementById('selMateria');
+  document.getElementById('detalle').style.display = 'none';
+  document.getElementById('emptyDetalle').style.display = 'block';
+
+  if (idCarrera === '0') {
+    selMateria.innerHTML = '<option value="0">Primero elegí un profesorado</option>';
+    selMateria.disabled = true;
+    return;
+  }
+
+  selMateria.innerHTML = '<option value="0">Cargando...</option>';
+  selMateria.disabled = true;
+
+  try {
+    const res = await fetch(API + '/tic/materias-por-carrera?id_carrera=' + idCarrera, { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    const materias = data.materias || [];
+    selMateria.innerHTML = '<option value="0">Seleccionar materia...</option>' +
+      materias.map(m => `<option value="${m.id_materia}">${esc(m.nombre_materia)}</option>`).join('');
+    selMateria.disabled = false;
+  } catch (e) {
+    selMateria.innerHTML = '<option value="0">Error al cargar materias</option>';
+  }
+}
+
+async function onCambioMateria() {
+  const idMateria = document.getElementById('selMateria').value;
+  const detalle = document.getElementById('detalle');
+  const empty = document.getElementById('emptyDetalle');
+
+  if (idMateria === '0') {
+    detalle.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+
+  const nombreMateria = document.getElementById('selMateria').selectedOptions[0].textContent;
+  const nombreCarrera = document.getElementById('selCarrera').selectedOptions[0].textContent;
+  document.getElementById('tituloMateria').textContent = nombreMateria;
+  document.getElementById('cantidadDetalle').textContent = '...';
+  document.getElementById('tbodyDetalle').innerHTML = '<tr><td colspan="4" class="text-center text-muted">Cargando...</td></tr>';
+  empty.style.display = 'none';
+  detalle.style.display = 'block';
+
+  try {
+    const res = await fetch(API + '/tic/alumnos-por-materia?id_materia=' + idMateria, { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    const alumnos = data.alumnos || [];
+    datosDetalle = { materia: nombreMateria, carrera: nombreCarrera, alumnos };
+    document.getElementById('cantidadDetalle').textContent = data.cantidad + (data.cantidad === 1 ? ' inscripto' : ' inscriptos');
+
+    if (!alumnos.length) {
+      document.getElementById('tbodyDetalle').innerHTML = '<tr><td colspan="4" class="text-center text-muted">No hay alumnos inscriptos en esta materia.</td></tr>';
+      return;
+    }
+
+    document.getElementById('tbodyDetalle').innerHTML = alumnos.map(a => `
+      <tr>
+        <td>${esc(a.apellido)}</td>
+        <td>${esc(a.nombre)}</td>
+        <td>${esc(a.dni)}</td>
+        <td class="text-sm">${a.correo ? esc(a.correo) : '—'}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    document.getElementById('tbodyDetalle').innerHTML = '<tr><td colspan="4" class="text-center text-muted">Error al cargar.</td></tr>';
+  }
+}
+
+function exportarTodoCSV() {
+  if (!todasMaterias.length) return;
+  const filas = [['Profesorado', 'Materia', 'Inscriptos habilitados']];
+  todasMaterias.forEach(m => filas.push([m.nombre_carrera, m.nombre_materia, m.inscriptos]));
+  descargarCSV(filas, 'inscriptos_por_materia.csv');
+}
+
+function exportarDetalleCSV() {
+  if (!datosDetalle || !datosDetalle.alumnos.length) return;
+  const filas = [['Apellido', 'Nombre', 'DNI', 'Correo']];
+  datosDetalle.alumnos.forEach(a => filas.push([a.apellido, a.nombre, a.dni, a.correo || '']));
+  const nombreArchivo = `inscriptos_${datosDetalle.materia.replace(/[^a-z0-9]+/gi, '_')}.csv`;
+  descargarCSV(filas, nombreArchivo);
+}
+
+function descargarCSV(filas, nombreArchivo) {
+  const csv = filas.map(fila => fila.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nombreArchivo;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"\']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+cargarTodas();
+cargarCarreras();
+</script>
+</body>
+</html>

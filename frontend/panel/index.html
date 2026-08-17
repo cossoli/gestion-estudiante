@@ -289,6 +289,11 @@ function renderTabs(porCarrera) {
     panel.className = 'tab-panel' + (i === 0 ? ' active' : '');
     panel.id        = `tab-panel-${c.id_carrera}`;
 
+    function inscripcionCerrada() {
+  const limite = new Date('2026-08-31T00:00:00');
+  return new Date() >= limite;
+}
+
     const materias = porCarrera[c.id_carrera] || [];
 
     panel.innerHTML = `
@@ -297,7 +302,7 @@ function renderTabs(porCarrera) {
           <span class="text-sm text-muted">${c.anio_actual}° año · Cohorte ${c.anio_cohorte || '—'}</span>
         </div>
         <button class="btn btn-primary" style="padding:8px 16px;font-size:13px"
-          onclick="abrirInscripcion(${c.id_carrera}, '${esc(c.nombre_carrera)}')">
+          ${inscripcionCerrada() ? 'disabled style="padding:8px 16px;font-size:13px;opacity:0.5;cursor:not-allowed"' : `onclick="abrirInscripcion(${c.id_carrera}, '${esc(c.nombre_carrera)}')"`}>
           + Anotarme a una materia
         </button>
       </div>

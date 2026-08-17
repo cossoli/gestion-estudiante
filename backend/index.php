@@ -461,10 +461,12 @@ if ($path === '/tic/reset-password-alumno' && $_SERVER['REQUEST_METHOD'] === 'PO
     if ($path === '/tic/estudiantes' && $_SERVER['REQUEST_METHOD'] === 'GET') {
         $stmt = $pdo->query(
             "SELECT e.id_estudiante, e.apellido, e.nombre, e.dni, e.correo, e.anio_actual, e.estado_general,
-                    c.nombre_carrera, t.estado_tic, t.fecha_carga_plataforma, t.observaciones_tic
+                    c.nombre_carrera, t.estado_tic, t.fecha_carga_plataforma, t.observaciones_tic,
+                    u.activo AS cuenta_activa
              FROM estudiantes e
              JOIN carreras c ON c.id_carrera = e.id_carrera
              LEFT JOIN carga_tic t ON t.id_estudiante = e.id_estudiante
+             LEFT JOIN usuarios u ON u.id_usuario = e.id_usuario
              WHERE e.estado_general = 'aprobado_secretaria' OR e.estado_general = 'cargado_plataforma'
              ORDER BY e.apellido, e.nombre"
         );

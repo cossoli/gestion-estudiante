@@ -76,6 +76,12 @@ try {
         respond($stmt->fetchAll());
     }
 
+    // Carreras para el formulario publico de inscripcion (incluye inactivas, con cupo cerrado)
+    if ($path === '/carreras-inscripcion' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $stmt = $pdo->query("SELECT id_carrera, nombre_carrera, activa FROM carreras ORDER BY nombre_carrera");
+        respond($stmt->fetchAll());
+    }
+
     // ── Login estudiante por DNI ───────────────────────────────────────────────
     // El estudiante ingresa con DNI + contraseña (inicialmente su mismo DNI).
     // Se busca el usuario vinculado al estudiante cuyo dni coincide.
@@ -386,7 +392,7 @@ try {
             } else {
                 $pdo->prepare("INSERT INTO carga_tic (id_estudiante) VALUES (?)")->execute([$studentId]);
             }
-            assign_initial_subjects($pdo, $studentId);
+            // assign_initial_subjects($pdo, $studentId); // Deshabilitado: el estudiante elige sus materias desde su panel
         }
 
         $pdo->commit();
@@ -557,6 +563,167 @@ if ($path === '/tic/reset-password-alumno' && $_SERVER['REQUEST_METHOD'] === 'PO
                 ? 'Cuenta habilitada correctamente.'
                 : 'Cuenta deshabilitada correctamente.'
         ]);
+    }
+
+    // TIC: ABM estudiantes - buscar
+    if ($path === '/tic/estudiantes-abm-buscar' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $q = trim($_GET['q'] ?? '');
+        $idCarrera = $_GET['id_carrera'] ?? '0';
+
+        $sql = "SELECT e.id_estudiante, e.apellido, e.nombre, e.dni, e.correo, e.telefono,
+                       e.fecha_nacimiento, e.domicilio, e.localidad, e.id_carrera, e.anio_actual,
+                       e.anio_cohorte, e.estado_general, c.nombre_carrera, u.activo AS cuenta_activa
+                FROM estudiantes e
+                JOIN carreras c ON c.id_carrera = e.id_carrera
+                LEFT JOIN usuarios u ON u.id_usuario = e.id_usuario
+                WHERE 1=1";
+        $params = [];
+        if ($q !== '') {
+            $sql .= " AND (e.apellido ILIKE ? OR e.nombre ILIKE ? OR e.dni ILIKE ?)";
+            $like = "%$q%";
+            $params[] = $like; $params[] = $like; $params[] = $like;
+        }
+        if ($idCarrera !== '0' && $idCarrera !== '') {
+            $sql .= " AND e.id_carrera = ?";
+            $params[] = (int)$idCarrera;
+        }
+        $sql .= " ORDER BY e.apellido, e.nombre";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $estudiantes = $stmt->fetchAll();
+        respond(['ok' => true, 'estudiantes' => $estudiantes]);
+    }
+
+    // TIC: ABM estudiantes - crear
+    if ($path === '/tic/estudiante-crear' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_input();
+        $apellido = trim($data['apellido'] ?? '');
+        $nombre = trim($data['nombre'] ?? '');
+        $dni = trim($data['dni'] ?? '');
+        $correo = trim($data['correo'] ?? '');
+        $telefono = trim($data['telefono'] ?? '') ?: null;
+        $fechaNacimiento = trim($data['fecha_nacimiento'] ?? '') ?: null;
+        $domicilio = trim($data['domicilio'] ?? '') ?: null;
+        $localidad = trim($data['localidad'] ?? '') ?: null;
+        $idCarrera = (int)($data['id_carrera'] ?? 0);
+        $anioActual = (int)($data['anio_actual'] ?? 1);
+        $anioCohorte = (int)($data['anio_cohorte'] ?? 0) ?: null;
+
+        if ($apellido === '' || $nombre === '' || $dni === '' || $idCarrera === 0) {
+            respond(['ok' => false, 'error' => 'Apellido, nombre, DNI y carrera son obligatorios.'], 400);
+        }
+
+        $checkDni = $pdo->prepare("SELECT id_estudiante FROM estudiantes WHERE dni = ?");
+        $checkDni->execute([$dni]);
+        if ($checkDni->fetch()) {
+            respond(['ok' => false, 'error' => 'Ya existe un estudiante con ese DNI.'], 409);
+        }
+
+        if ($correo !== '') {
+            $checkCorreo = $pdo->prepare("SELECT id_estudiante FROM estudiantes WHERE correo = ?");
+            $checkCorreo->execute([$correo]);
+            if ($checkCorreo->fetch()) {
+                respond(['ok' => false, 'error' => 'Ese correo ya está registrado con otro estudiante.'], 409);
+            }
+        }
+
+        $pdo->beginTransaction();
+
+        $emailUsuario = $correo !== '' ? $correo : ($dni . '@ifdc.local');
+        $hash = password_hash($dni, PASSWORD_DEFAULT);
+        $token = bin2hex(random_bytes(16));
+
+        $insUser = $pdo->prepare(
+            "INSERT INTO usuarios (email, password_hash, email_validado, token_validacion)
+             VALUES (?, ?, TRUE, ?)"
+        );
+        $insUser->execute([$emailUsuario, $hash, $token]);
+        $userId = (int) $pdo->lastInsertId();
+
+        $insEst = $pdo->prepare(
+            "INSERT INTO estudiantes
+                (id_usuario, apellido, nombre, dni, correo, telefono, fecha_nacimiento,
+                 domicilio, localidad, id_carrera, anio_actual, anio_cohorte, estado_general)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'cargado_plataforma')"
+        );
+        $insEst->execute([
+            $userId, $apellido, $nombre, $dni, $correo ?: null, $telefono,
+            $fechaNacimiento, $domicilio, $localidad,
+            $idCarrera, $anioActual, $anioCohorte
+        ]);
+        $studentId = (int) $pdo->lastInsertId();
+
+        $insCarrera = $pdo->prepare(
+            "INSERT INTO estudiante_carreras (id_estudiante, id_carrera, anio_actual, anio_cohorte)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT (id_estudiante, id_carrera) DO UPDATE SET anio_cohorte = EXCLUDED.anio_cohorte"
+        );
+        $insCarrera->execute([$studentId, $idCarrera, $anioActual, $anioCohorte]);
+
+        $insCarga = $pdo->prepare(
+            "INSERT INTO carga_tic (id_estudiante, estado_tic, fecha_carga_plataforma, usuario_tic)
+             VALUES (?, 'cargado', CURRENT_TIMESTAMP, 'Área TIC')
+             ON CONFLICT (id_estudiante) DO UPDATE SET estado_tic = 'cargado', fecha_carga_plataforma = CURRENT_TIMESTAMP, usuario_tic = 'Área TIC'"
+        );
+        $insCarga->execute([$studentId]);
+
+        $pdo->commit();
+
+        respond(['ok' => true, 'message' => 'Estudiante creado correctamente.', 'id_estudiante' => $studentId]);
+    }
+
+    // TIC: ABM estudiantes - editar
+    if ($path === '/tic/estudiante-editar' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_input();
+        $studentId = (int) ($data['id_estudiante'] ?? 0);
+        $apellido = trim($data['apellido'] ?? '');
+        $nombre = trim($data['nombre'] ?? '');
+        $dni = trim($data['dni'] ?? '');
+        $correo = trim($data['correo'] ?? '');
+        $telefono = trim($data['telefono'] ?? '') ?: null;
+        $fechaNacimiento = trim($data['fecha_nacimiento'] ?? '') ?: null;
+        $domicilio = trim($data['domicilio'] ?? '') ?: null;
+        $localidad = trim($data['localidad'] ?? '') ?: null;
+        $idCarrera = (int)($data['id_carrera'] ?? 0);
+        $anioActual = (int)($data['anio_actual'] ?? 1);
+        $anioCohorte = (int)($data['anio_cohorte'] ?? 0) ?: null;
+
+        if ($studentId === 0 || $apellido === '' || $nombre === '' || $dni === '' || $idCarrera === 0) {
+            respond(['ok' => false, 'error' => 'Faltan datos obligatorios.'], 400);
+        }
+
+        $checkDni = $pdo->prepare("SELECT id_estudiante FROM estudiantes WHERE dni = ? AND id_estudiante != ?");
+        $checkDni->execute([$dni, $studentId]);
+        if ($checkDni->fetch()) {
+            respond(['ok' => false, 'error' => 'Ya existe otro estudiante con ese DNI.'], 409);
+        }
+
+        $pdo->beginTransaction();
+
+        $upd = $pdo->prepare(
+            "UPDATE estudiantes SET
+                apellido = ?, nombre = ?, dni = ?, correo = ?, telefono = ?,
+                fecha_nacimiento = ?, domicilio = ?, localidad = ?,
+                id_carrera = ?, anio_actual = ?, anio_cohorte = ?
+             WHERE id_estudiante = ?"
+        );
+        $upd->execute([
+            $apellido, $nombre, $dni, $correo ?: null, $telefono,
+            $fechaNacimiento, $domicilio, $localidad,
+            $idCarrera, $anioActual, $anioCohorte, $studentId
+        ]);
+
+        $insCarrera = $pdo->prepare(
+            "INSERT INTO estudiante_carreras (id_estudiante, id_carrera, anio_actual, anio_cohorte)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT (id_estudiante, id_carrera) DO UPDATE SET anio_cohorte = EXCLUDED.anio_cohorte"
+        );
+        $insCarrera->execute([$studentId, $idCarrera, $anioActual, $anioCohorte]);
+
+        $pdo->commit();
+
+        respond(['ok' => true, 'message' => 'Estudiante actualizado correctamente.']);
     }
 
     // ── Panel alumno: materias inscriptas agrupadas por carrera ─────────────

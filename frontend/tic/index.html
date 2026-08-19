@@ -78,6 +78,7 @@
       Backup
     </button>
       <button class="tab-btn" id="nav-inscriptos" onclick="cambiarTab('inscriptos')">Inscriptos por materia</button>
+    <button class="tab-btn" id="nav-estudiantes" onclick="cambiarTab('estudiantes')">Estudiantes (ABM)</button>
     </div>
 
     <!-- Sección ingresantes -->
@@ -115,7 +116,38 @@
       </div>
     </div>
 
-    <!-- Sección nuevas materias -->
+    <!-- Sección estudiantes (ABM) -->
+<div id="secEstudiantesABM" class="card" style="display:none;border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
+  <div class="filter-bar">
+    <input type="search" id="abmBusqueda" placeholder="Buscar por nombre, apellido o DNI...">
+    <select id="abmFiltroCarrera" style="max-width:220px"><option value="0">Todas las carreras</option></select>
+    <button class="btn btn-primary" onclick="buscarEstudiantesABM()">Buscar</button>
+    <button class="btn btn-secondary" onclick="abrirModalEstudiante()">+ Nuevo estudiante</button>
+  </div>
+  <div id="abmContador" class="text-sm text-muted" style="margin:6px 0 10px;display:none"></div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Estudiante</th>
+          <th>DNI</th>
+          <th>Carrera</th>
+          <th>Año</th>
+          <th>Estado</th>
+          <th>Cuenta</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="abmTbody"></tbody>
+    </table>
+  </div>
+  <div id="abmEmptyState" class="empty-state" style="display:none">
+    <div class="empty-state-icon">🎓</div>
+    <p>No hay estudiantes con ese criterio.</p>
+  </div>
+</div>
+
+<!-- Sección nuevas materias -->
     <div id="secMaterias" class="card" style="display:none;border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
       <div class="filter-bar">
         <input type="search" id="busquedaMat" placeholder="Buscar por nombre o DNI..." oninput="filtrarMaterias()">
@@ -248,6 +280,71 @@
     <div class="modal-footer">
       <button class="btn btn-secondary" id="modalObsCancel">Cancelar</button>
       <button class="btn btn-ok" id="modalObsOk">Marcar como cargado</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modalEstudiante">
+  <div class="modal" style="max-width:560px">
+    <h3 class="modal-title" id="modalEstudianteTitle">Nuevo estudiante</h3>
+    <div class="modal-body">
+      <input type="hidden" id="estId" value="">
+      <div class="grid grid-2" style="gap:12px;margin-bottom:10px">
+        <div class="field">
+          <label class="field-label">Apellido</label>
+          <input id="estApellido" type="text" placeholder="Ej: Pérez">
+        </div>
+        <div class="field">
+          <label class="field-label">Nombre</label>
+          <input id="estNombre" type="text" placeholder="Ej: Juan">
+        </div>
+        <div class="field">
+          <label class="field-label">DNI</label>
+          <input id="estDni" type="text" placeholder="Ej: 30123456">
+        </div>
+        <div class="field">
+          <label class="field-label">Correo (opcional)</label>
+          <input id="estCorreo" type="email" placeholder="ej@correo.com">
+        </div>
+        <div class="field">
+          <label class="field-label">Teléfono</label>
+          <input id="estTelefono" type="text">
+        </div>
+        <div class="field">
+          <label class="field-label">Fecha de nacimiento</label>
+          <input id="estFechaNacimiento" type="date">
+        </div>
+        <div class="field">
+          <label class="field-label">Domicilio</label>
+          <input id="estDomicilio" type="text">
+        </div>
+        <div class="field">
+          <label class="field-label">Localidad</label>
+          <input id="estLocalidad" type="text">
+        </div>
+        <div class="field">
+          <label class="field-label">Carrera</label>
+          <select id="estCarrera"></select>
+        </div>
+        <div class="field">
+          <label class="field-label">Año actual</label>
+          <select id="estAnioActual">
+            <option value="1">1°</option>
+            <option value="2">2°</option>
+            <option value="3">3°</option>
+            <option value="4">4°</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">Año cohorte (ingreso)</label>
+          <input id="estAnioCohorte" type="number" placeholder="Ej: 2026">
+        </div>
+      </div>
+      <p id="estModalStatus" class="text-sm" style="min-height:18px"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modalEstudianteCancel">Cancelar</button>
+      <button class="btn btn-primary" id="modalEstudianteGuardar">Guardar</button>
     </div>
   </div>
 </div>
@@ -440,7 +537,172 @@ function cambiarTab(tab) {
   document.getElementById('nav-inscriptos').classList.toggle('active', tab === 'inscriptos');
   if (tab === 'materias') cargarMaterias();
   if (tab === 'inscriptos') inicializarInscriptos();
+  document.getElementById('secEstudiantesABM').style.display = tab === 'estudiantes' ? 'block' : 'none';
+  document.getElementById('nav-estudiantes').classList.toggle('active', tab === 'estudiantes');
+  if (tab === 'estudiantes') inicializarABM();
 }
+
+let abmCarrerasCache = null;
+let abmInicializado = false;
+
+async function inicializarABM() {
+  if (!abmInicializado) {
+    await poblarCarrerasABM();
+    abmInicializado = true;
+  }
+  buscarEstudiantesABM();
+}
+
+async function poblarCarrerasABM() {
+  if (abmCarrerasCache) return abmCarrerasCache;
+  try {
+    const res = await fetch(API + '/carreras', { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    abmCarrerasCache = data.carreras || data.ok && data.carreras || [];
+    const selFiltro = document.getElementById('abmFiltroCarrera');
+    const selModal  = document.getElementById('estCarrera');
+    let optsFiltro = '<option value="0">Todas las carreras</option>';
+    let optsModal  = '';
+    (abmCarrerasCache || []).forEach(c => {
+      optsFiltro += `<option value="${c.id_carrera}">${esc(c.nombre_carrera)}</option>`;
+      optsModal  += `<option value="${c.id_carrera}">${esc(c.nombre_carrera)}</option>`;
+    });
+    selFiltro.innerHTML = optsFiltro;
+    selModal.innerHTML  = optsModal;
+  } catch {}
+}
+
+async function buscarEstudiantesABM() {
+  const q          = document.getElementById('abmBusqueda').value.trim();
+  const idCarrera  = document.getElementById('abmFiltroCarrera').value;
+  const tbody      = document.getElementById('abmTbody');
+  const vacio      = document.getElementById('abmEmptyState');
+  const contador   = document.getElementById('abmContador');
+
+  tbody.innerHTML = '';
+  vacio.style.display = 'none';
+  contador.style.display = 'none';
+
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (idCarrera !== '0') params.set('id_carrera', idCarrera);
+
+  try {
+    const res  = await fetch(API + '/tic/estudiantes-abm-buscar?' + params.toString(), { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    if (!data.ok || !data.estudiantes.length) {
+      vacio.style.display = 'block';
+      return;
+    }
+    data.estudiantes.forEach(e => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${esc(e.apellido)}, ${esc(e.nombre)}</td>
+        <td>${esc(e.dni)}</td>
+        <td>${esc(e.nombre_carrera)}</td>
+        <td>${esc(e.anio_actual)}°</td>
+        <td>${esc(e.estado_general)}</td>
+        <td>${e.cuenta_activa === false ? 'Deshabilitada' : 'Activa'}</td>
+        <td>
+          <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick='abrirModalEstudiante(${JSON.stringify(e)})'>Editar</button>
+          <button class="btn ${e.cuenta_activa === false ? 'btn-ok' : 'btn-secondary'}" style="padding:4px 10px;font-size:12px" onclick="toggleActivoABM(${e.id_estudiante}, ${e.cuenta_activa === false})">${e.cuenta_activa === false ? 'Habilitar' : 'Deshabilitar'}</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+    contador.textContent = `Se encontraron ${data.estudiantes.length} estudiante(s).`;
+    contador.style.display = 'block';
+  } catch {
+    vacio.textContent = 'No se pudo realizar la búsqueda.';
+    vacio.style.display = 'block';
+  }
+}
+
+async function abrirModalEstudiante(est) {
+  await poblarCarrerasABM();
+  document.getElementById('estModalStatus').textContent = '';
+  document.getElementById('modalEstudianteTitle').textContent = est ? 'Editar estudiante' : 'Nuevo estudiante';
+  document.getElementById('estId').value             = est ? est.id_estudiante : '';
+  document.getElementById('estApellido').value        = est ? est.apellido : '';
+  document.getElementById('estNombre').value          = est ? est.nombre : '';
+  document.getElementById('estDni').value             = est ? est.dni : '';
+  document.getElementById('estCorreo').value          = est && est.correo ? est.correo : '';
+  document.getElementById('estTelefono').value        = est && est.telefono ? est.telefono : '';
+  document.getElementById('estFechaNacimiento').value = est && est.fecha_nacimiento ? est.fecha_nacimiento.substring(0,10) : '';
+  document.getElementById('estDomicilio').value       = est && est.domicilio ? est.domicilio : '';
+  document.getElementById('estLocalidad').value       = est && est.localidad ? est.localidad : '';
+  document.getElementById('estCarrera').value         = est ? est.id_carrera : (abmCarrerasCache && abmCarrerasCache[0] ? abmCarrerasCache[0].id_carrera : '');
+  document.getElementById('estAnioActual').value      = est ? est.anio_actual : '1';
+  document.getElementById('estAnioCohorte').value     = est && est.anio_cohorte ? est.anio_cohorte : '';
+  document.getElementById('modalEstudiante').classList.remove('hidden');
+}
+
+function cerrarModalEstudiante() {
+  document.getElementById('modalEstudiante').classList.add('hidden');
+}
+
+async function guardarEstudiante() {
+  const status = document.getElementById('estModalStatus');
+  const id = document.getElementById('estId').value;
+  const payload = {
+    apellido: document.getElementById('estApellido').value.trim(),
+    nombre: document.getElementById('estNombre').value.trim(),
+    dni: document.getElementById('estDni').value.trim(),
+    correo: document.getElementById('estCorreo').value.trim(),
+    telefono: document.getElementById('estTelefono').value.trim(),
+    fecha_nacimiento: document.getElementById('estFechaNacimiento').value,
+    domicilio: document.getElementById('estDomicilio').value.trim(),
+    localidad: document.getElementById('estLocalidad').value.trim(),
+    id_carrera: document.getElementById('estCarrera').value,
+    anio_actual: document.getElementById('estAnioActual').value,
+    anio_cohorte: document.getElementById('estAnioCohorte').value
+  };
+  if (!payload.apellido || !payload.nombre || !payload.dni || !payload.id_carrera) {
+    status.textContent = 'Completá apellido, nombre, DNI y carrera.';
+    status.style.color = '#c0392b';
+    return;
+  }
+  const url = id ? '/tic/estudiante-editar' : '/tic/estudiante-crear';
+  if (id) payload.id_estudiante = id;
+  try {
+    const res = await fetch(API + url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      status.textContent = data.error || 'No se pudo guardar.';
+      status.style.color = '#c0392b';
+      return;
+    }
+    cerrarModalEstudiante();
+    buscarEstudiantesABM();
+  } catch {
+    status.textContent = 'Error de conexión.';
+    status.style.color = '#c0392b';
+  }
+}
+
+async function toggleActivoABM(idEstudiante, activar) {
+  try {
+    const res = await fetch(API + '/tic/estudiante/deshabilitar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_estudiante: idEstudiante, activo: activar }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (data.ok) buscarEstudiantesABM();
+  } catch {}
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btnCancel = document.getElementById('modalEstudianteCancel');
+  const btnGuardar = document.getElementById('modalEstudianteGuardar');
+  if (btnCancel) btnCancel.addEventListener('click', cerrarModalEstudiante);
+  if (btnGuardar) btnGuardar.addEventListener('click', guardarEstudiante);
+});
 
 async function resetearPassword() {
   const tipo = document.getElementById('resetTipo').value;

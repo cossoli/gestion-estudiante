@@ -251,13 +251,19 @@ function mostrarArchivo(input, fieldId, nameId) {
 async function cargarCarreras() {
   const cont = document.getElementById('checkCarreras');
   try {
-    const res  = await fetch(API + '/carreras', { signal: AbortSignal.timeout(6000) });
+    const res  = await fetch(API + '/carreras-inscripcion', { signal: AbortSignal.timeout(6000) });
     const data = await res.json();
-    cont.innerHTML = data.map(c => `
+    cont.innerHTML = data.map(c => c.activa ? `
       <label class="carrera-check" id="label-carr-${c.id_carrera}">
         <input type="checkbox" name="carreras" value="${c.id_carrera}"
                onchange="toggleCarrera(this, ${c.id_carrera})">
         <span style="font-weight:500;font-size:14px">${esc(c.nombre_carrera)}</span>
+      </label>
+    ` : `
+      <label class="carrera-check" id="label-carr-${c.id_carrera}" style="opacity:0.55;cursor:not-allowed">
+        <input type="checkbox" disabled>
+        <span style="font-weight:500;font-size:14px">${esc(c.nombre_carrera)}</span>
+        <span style="margin-left:8px;font-size:12px;color:#c0392b;font-weight:600">Cupo cerrado</span>
       </label>
     `).join('');
   } catch {

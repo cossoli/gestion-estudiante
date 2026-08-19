@@ -111,6 +111,7 @@
       </div>
       <div style="margin:10px 0"><button class="btn btn-secondary" onclick="exportarCSV('alumnos', 'alumnos_ifdc.csv')">Exportar CSV</button></div>
   <div id="resultadoAlumnosVacio" class="text-sm text-muted" style="display:none">No se encontraron alumnos con ese criterio.</div>
+<div id="contadorAlumnos" class="text-sm text-muted" style="margin:6px 0 10px;display:none"></div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse" id="tablaAlumnosBusqueda"></table>
       </div>
@@ -135,6 +136,7 @@
       </div>
       <div style="margin:10px 0"><button class="btn btn-secondary" onclick="exportarCSV('docentes', 'docentes_ifdc.csv')">Exportar CSV</button></div>
   <div id="resultadoDocentesVacio" class="text-sm text-muted" style="display:none">No se encontraron docentes con ese criterio.</div>
+<div id="contadorDocentes" class="text-sm text-muted" style="margin:6px 0 10px;display:none"></div>
       <div style="overflow-x:auto">
         <table style="width:100%;border-collapse:collapse" id="tablaDocentesBusqueda"></table>
       </div>
@@ -322,12 +324,16 @@ async function buscarAlumnos() {
     const data = await res.json();
     if (!data.ok || !data.alumnos.length) {
       vacio.style.display = 'block';
+      document.getElementById('contadorAlumnos').style.display = 'none';
       return;
     }
     renderTabla(tabla,
       ['Apellido y Nombre', 'DNI', 'Carrera', 'Año', 'Estado'],
       data.alumnos.map(a => [`${a.apellido}, ${a.nombre}`, a.dni, a.nombre_carrera, a.anio_actual + '°', a.estado_general])
     );
+    const contAl = document.getElementById('contadorAlumnos');
+    contAl.textContent = `Se encontraron ${data.alumnos.length} alumno(s).`;
+    contAl.style.display = 'block';
   } catch {
     vacio.textContent = 'No se pudo realizar la búsqueda.';
     vacio.style.display = 'block';
@@ -352,12 +358,16 @@ async function buscarDocentes() {
     const data = await res.json();
     if (!data.ok || !data.docentes.length) {
       vacio.style.display = 'block';
+      document.getElementById('contadorDocentes').style.display = 'none';
       return;
     }
     renderTabla(tabla,
       ['Apellido y Nombre', 'Email', 'Carrera/s'],
       data.docentes.map(d => [`${d.apellido}, ${d.nombre}`, d.email || '—', d.carreras.join(', ')])
     );
+    const contDoc = document.getElementById('contadorDocentes');
+    contDoc.textContent = `Se encontraron ${data.docentes.length} docente(s).`;
+    contDoc.style.display = 'block';
   } catch {
     vacio.textContent = 'No se pudo realizar la búsqueda.';
     vacio.style.display = 'block';

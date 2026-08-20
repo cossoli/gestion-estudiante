@@ -1833,6 +1833,194 @@ if ($path === '/tic/nuevas-materias' && $_SERVER['REQUEST_METHOD'] === 'GET') {
 
 
     // TIC: generar y descargar backup de la base de datos
+    
+    // ========== RECURSOS (TIC + Docente) ==========
+
+    // TIC: listar catalogo de recursos
+    if ($path === '/tic/recursos' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $stmt = $pdo->query("SELECT id_recurso, nombre, cantidad, estado, activo FROM recursos ORDER BY nombre");
+        respond(['ok' => true, 'recursos' => $stmt->fetchAll()]);
+    }
+
+    // TIC: crear recurso
+    
+    // TIC: cambiar estado de un recurso (disponible / en_reparacion / baja)
+    if ($path === '/tic/recursos/estado' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_input();
+        $idRecurso = (int) ($data['id_recurso'] ?? 0);
+        $estado = $data['estado'] ?? '';
+
+        if ($idRecurso === 0) {
+            respond(['ok' => false, 'error' => 'Falta id_recurso.'], 400);
+        }
+        if (!in_array($estado, ['disponible', 'en_reparacion', 'baja'], true)) {
+            respond(['ok' => false, 'error' => 'Estado invalido.'], 400);
+        }
+
+        $stmt = $pdo->prepare("UPDATE recursos SET estado = ? WHERE id_recurso = ?");
+        $stmt->execute([$estado, $idRecurso]);
+
+        respond(['ok' => true, 'message' => 'Estado actualizado correctamente.']);
+    }
+
+    if ($path === '/tic/recursos/crear' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_input();
+        $nombre = trim($data['nombre'] ?? '');
+        $cantidad = (int) ($data['cantidad'] ?? 1);
+        $estado = $data['estado'] ?? 'disponible';
+
+        if ($nombre === '') {
+            respond(['ok' => false, 'error' => 'Falta el nombre del recurso.'], 400);
+        }
+        if ($cantidad < 1) {
+            respond(['ok' => false, 'error' => 'La cantidad debe ser al menos 1.'], 400);
+        }
+        if (!in_array($estado, ['disponible', 'en_reparacion', 'baja'], true)) {
+            respond(['ok' => false, 'error' => 'Estado invalido.'], 400);
+        }
+
+        $stmt = $pdo->prepare("INSERT INTO recursos (nombre, cantidad, estado) VALUES (?, ?, ?)");
+        $stmt->execute([$nombre, $cantidad, $estado]);
+
+        respond(['ok' => true, 'message' => 'Recurso creado correctamente.']);
+    }
+
+    // TIC: listado completo de reservas (para saber a quien armarle el recurso)
+    if ($path === '/tic/reservas' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $stmt = $pdo->query(
+            "SELECT r.id_reserva, r.fecha, r.hora_inicio, r.hora_fin, r.aula, r.estado,
+                    rec.nombre AS recurso,
+                    d.apellido AS docente_apellido, d.nombre AS docente_nombre,
+                    m.nombre_materia AS materia
+             FROM reservas_recursos r
+             JOIN recursos rec ON rec.id_recurso = r.id_recurso
+             JOIN docentes d ON d.id_docente = r.id_docente
+             LEFT JOIN materias m ON m.id_materia = r.id_materia
+             WHERE r.estado != 'cancelada'
+             ORDER BY r.fecha, r.hora_inicio"
+        );
+        respond(['ok' => true, 'reservas' => $stmt->fetchAll()]);
+    }
+
+    // TIC: dar de baja cualquier reserva
+    if ($path === '/tic/reservas/baja' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_input();
+        $idReserva = (int) ($data['id_reserva'] ?? 0);
+        if ($idReserva === 0) {
+            respond(['ok' => false, 'error' => 'Falta id_reserva.'], 400);
+        }
+        $stmt = $pdo->prepare("UPDATE reservas_recursos SET estado = 'cancelada' WHERE id_reserva = ?");
+        $stmt->execute([$idReserva]);
+        respond(['ok' => true, 'message' => 'Reserva cancelada correctamente.']);
+    }
+
+    // Docente: recursos disponibles para reservar
+    if ($path === '/docente/recursos-disponibles' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $stmt = $pdo->query("SELECT id_recurso, nombre FROM recursos WHERE activo = TRUE AND estado = 'disponible' ORDER BY nombre");
+        respond(['ok' => true, 'recursos' => $stmt->fetchAll()]);
+    }
+
+    // Docente: crear reserva
+    if ($path === '/docente/reservas/crear' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_input();
+        $idDocente = (int) ($data['id_docente'] ?? 0);
+        $idRecurso = (int) ($data['id_recurso'] ?? 0);
+        $idMateria = isset($data['id_materia']) && $data['id_materia'] !== '' ? (int) $data['id_materia'] : null;
+        $fecha = trim($data['fecha'] ?? '');
+        $horaInicio = trim($data['hora_inicio'] ?? '');
+        $aula = trim($data['aula'] ?? '');
+
+        if ($idDocente === 0 || $idRecurso === 0 || $fecha === '' || $horaInicio === '') {
+            respond(['ok' => false, 'error' => 'Faltan datos obligatorios.'], 400);
+        }
+
+        $fechaObj = DateTime::createFromFormat('Y-m-d', $fecha);
+        if (!$fechaObj) {
+            respond(['ok' => false, 'error' => 'Fecha invalida.'], 400);
+        }
+
+        $hoy = new DateTime('today');
+        $limite = (clone $hoy)->modify('+3 days');
+        if ($fechaObj < $hoy || $fechaObj > $limite) {
+            respond(['ok' => false, 'error' => 'La reserva debe hacerse con hasta 3 dias de anticipacion.'], 400);
+        }
+
+        $diaSemana = (int) $fechaObj->format('N'); // 1=lunes .. 7=domingo
+        if ($diaSemana > 5) {
+            respond(['ok' => false, 'error' => 'Solo se puede reservar de lunes a viernes.'], 400);
+        }
+
+        $horaInicioObj = DateTime::createFromFormat('H:i', $horaInicio);
+        if (!$horaInicioObj) {
+            respond(['ok' => false, 'error' => 'Hora invalida.'], 400);
+        }
+        $horaFinObj = (clone $horaInicioObj)->modify('+2 hours');
+        $horaFin = $horaFinObj->format('H:i');
+
+        $chkRecurso = $pdo->prepare("SELECT 1 FROM recursos WHERE id_recurso = ? AND activo = TRUE AND estado = 'disponible'");
+        $chkRecurso->execute([$idRecurso]);
+        if (!$chkRecurso->fetch()) {
+            respond(['ok' => false, 'error' => 'El recurso no esta disponible.'], 404);
+        }
+
+        // Validar superposicion de horarios para ese recurso y fecha
+        $solap = $pdo->prepare(
+            "SELECT 1 FROM reservas_recursos
+             WHERE id_recurso = ? AND fecha = ? AND estado = 'activa'
+               AND NOT (hora_fin <= ? OR hora_inicio >= ?)"
+        );
+        $solap->execute([$idRecurso, $fecha, $horaInicio, $horaFin]);
+        if ($solap->fetch()) {
+            respond(['ok' => false, 'error' => 'El recurso ya esta reservado en ese horario.'], 409);
+        }
+
+        $ins = $pdo->prepare(
+            "INSERT INTO reservas_recursos (id_recurso, id_docente, id_materia, fecha, hora_inicio, hora_fin, aula)
+             VALUES (?, ?, ?, ?, ?, ?, ?)"
+        );
+        $ins->execute([$idRecurso, $idDocente, $idMateria, $fecha, $horaInicio, $horaFin, $aula !== '' ? $aula : null]);
+
+        respond(['ok' => true, 'message' => 'Reserva realizada correctamente.']);
+    }
+
+    // Docente: listar mis reservas
+    if ($path === '/docente/reservas' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $idDocente = (int) ($_GET['id_docente'] ?? 0);
+        if ($idDocente === 0) {
+            respond(['ok' => false, 'error' => 'Falta id_docente.'], 400);
+        }
+        $stmt = $pdo->prepare(
+            "SELECT r.id_reserva, r.fecha, r.hora_inicio, r.hora_fin, r.aula, r.estado,
+                    rec.nombre AS recurso,
+                    m.nombre_materia AS materia
+             FROM reservas_recursos r
+             JOIN recursos rec ON rec.id_recurso = r.id_recurso
+             LEFT JOIN materias m ON m.id_materia = r.id_materia
+             WHERE r.id_docente = ? AND r.estado != 'cancelada'
+             ORDER BY r.fecha, r.hora_inicio"
+        );
+        $stmt->execute([$idDocente]);
+        respond(['ok' => true, 'reservas' => $stmt->fetchAll()]);
+    }
+
+    // Docente: dar de baja mi reserva
+    if ($path === '/docente/reservas/baja' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_input();
+        $idDocente = (int) ($data['id_docente'] ?? 0);
+        $idReserva = (int) ($data['id_reserva'] ?? 0);
+        if ($idDocente === 0 || $idReserva === 0) {
+            respond(['ok' => false, 'error' => 'Faltan datos.'], 400);
+        }
+        $stmt = $pdo->prepare("UPDATE reservas_recursos SET estado = 'cancelada' WHERE id_reserva = ? AND id_docente = ?");
+        $stmt->execute([$idReserva, $idDocente]);
+        if ($stmt->rowCount() === 0) {
+            respond(['ok' => false, 'error' => 'No se encontro la reserva.'], 404);
+        }
+        respond(['ok' => true, 'message' => 'Reserva cancelada correctamente.']);
+    }
+
+    // ========== FIN RECURSOS ==========
+
     if ($path === '/tic/backup-db' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $data = json_input();
         $password = trim($data['password'] ?? '');

@@ -187,6 +187,45 @@
 
   </div>
 
+
+  <div id="cardRecursos" class="card" style="margin-top:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h3 class="card-title" style="margin:0">Reservar un recurso</h3>
+      <button class="btn btn-secondary" onclick="cargarMisReservas()">Actualizar</button>
+    </div>
+
+    <div id="recResvStatus" class="alert" style="display:none;margin-bottom:12px"></div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <div id="resvRecursoBox" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;border:1px solid var(--border,#ccc);border-radius:8px;padding:8px 12px;min-width:220px"></div>
+      <input type="date" id="resvFecha">
+      <input type="time" id="resvHora">
+      <select id="resvMateria" style="min-width:180px"><option value="">Sin materia</option></select>
+      <input type="text" id="resvAula" placeholder="Aula (opcional)" style="max-width:140px">
+      <button class="btn btn-primary" onclick="crearReservaDocente()">Reservar</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Horario</th>
+            <th>Recurso</th>
+            <th>Materia</th>
+            <th>Aula</th>
+            <th>Estado</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyMisReservas"></tbody>
+      </table>
+      <div id="emptyStateMisReservas" class="empty-state" style="display:none">
+        <p>No tenes reservas registradas.</p>
+      </div>
+    </div>
+  </div>
+
 </main>
 
 <!-- Modal: agregar materia -->
@@ -268,6 +307,167 @@ if (localStorage.getItem('docente_auth')) {
   const doc = JSON.parse(localStorage.getItem('docente_data') || '{}');
   mostrarMenu(doc);
 }
+
+
+function getDocenteActual() {
+  try {
+    return JSON.parse(localStorage.getItem('docente_data') || '{}');
+  } catch (e) {
+    return {};
+  }
+}
+
+async function cargarRecursosDisponiblesDocente() {
+  try {
+    const res = await fetch(API + '/docente/recursos-disponibles', { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    const box = document.getElementById('resvRecursoBox');
+    box.innerHTML = '';
+    if (data.ok && data.recursos.length) {
+      data.recursos.forEach(r => {
+        const label = document.createElement('label');
+        label.style.cssText = 'display:flex;align-items:center;gap:4px;font-size:13px;font-weight:normal;cursor:pointer';
+        label.innerHTML = `<input type="checkbox" value="${r.id_recurso}" class="chkRecurso"> ${esc(r.nombre)}`;
+        box.appendChild(label);
+      });
+    } else {
+      box.innerHTML = '<span style="font-size:13px;color:#888">No hay recursos disponibles</span>';
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function cargarMisMateriasParaReserva() {
+  const docente = getDocenteActual();
+  if (!docente.id_docente) return;
+  try {
+    const res = await fetch(API + '/docente/materias?id_docente=' + docente.id_docente, { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    const sel = document.getElementById('resvMateria');
+    sel.innerHTML = '<option value="">Sin materia</option>';
+    if (data.ok && data.materias) {
+      data.materias.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id_materia;
+        opt.textContent = m.nombre_materia;
+        sel.appendChild(opt);
+      });
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function crearReservaDocente() {
+  const docente = getDocenteActual();
+  const status = document.getElementById('recResvStatus');
+  clearStatus(status);
+  if (!docente.id_docente) {
+    setStatus(status, 'No se pudo identificar al docente.', 'error');
+    return;
+  }
+  const idsRecursos = Array.from(document.querySelectorAll('.chkRecurso:checked')).map(c => c.value);
+  const fecha = document.getElementById('resvFecha').value;
+  const hora = document.getElementById('resvHora').value;
+  const idMateria = document.getElementById('resvMateria').value;
+  const aula = document.getElementById('resvAula').value.trim();
+
+  if (!idsRecursos.length || !fecha || !hora) {
+    setStatus(status, 'Selecciona al menos un recurso, y completa fecha y hora.', 'error');
+    return;
+  }
+
+  let errores = [];
+  for (const idRecurso of idsRecursos) {
+    try {
+      const res = await fetch(API + '/docente/reservas/crear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id_docente: docente.id_docente,
+          id_recurso: idRecurso,
+          id_materia: idMateria || null,
+          fecha: fecha,
+          hora_inicio: hora,
+          aula: aula
+        }),
+        signal: AbortSignal.timeout(8000)
+      });
+      const data = await res.json();
+      if (!data.ok) errores.push(data.error || 'Error al reservar un recurso.');
+    } catch (e) {
+      errores.push('No se pudo conectar con el servidor.');
+    }
+  }
+
+  if (errores.length) {
+    setStatus(status, errores.join(' | '), 'error');
+  } else {
+    setStatus(status, 'Reserva realizada correctamente.', 'success');
+  }
+  document.getElementById('resvAula').value = '';
+  document.querySelectorAll('.chkRecurso:checked').forEach(c => c.checked = false);
+  cargarMisReservas();
+}
+
+async function cargarMisReservas() {
+  const docente = getDocenteActual();
+  if (!docente.id_docente) return;
+  try {
+    const res = await fetch(API + '/docente/reservas?id_docente=' + docente.id_docente, { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    const tbody = document.getElementById('tbodyMisReservas');
+    tbody.innerHTML = '';
+    if (!data.ok || !data.reservas.length) {
+      document.getElementById('emptyStateMisReservas').style.display = 'block';
+    } else {
+      document.getElementById('emptyStateMisReservas').style.display = 'none';
+      data.reservas.forEach(r => {
+        const tr = document.createElement('tr');
+        const horario = r.hora_inicio.substring(0,5) + ' a ' + r.hora_fin.substring(0,5);
+        const accion = r.estado === 'activa'
+          ? `<button class="btn btn-bad" style="padding:4px 10px;font-size:12px" onclick="cancelarReservaDocente(${r.id_reserva})">Cancelar</button>`
+          : '-';
+        tr.innerHTML = `<td>${r.fecha}</td><td>${horario}</td><td>${esc(r.recurso)}</td><td>${esc(r.materia || '-')}</td><td>${esc(r.aula || '-')}</td><td>${esc(r.estado)}</td><td>${accion}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function cancelarReservaDocente(idReserva) {
+  const docente = getDocenteActual();
+  if (!docente.id_docente) return;
+  if (!confirm('Confirma que desea cancelar esta reserva?')) return;
+  try {
+    const res = await fetch(API + '/docente/reservas/baja', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_docente: docente.id_docente, id_reserva: idReserva }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Error al cancelar la reserva.'); return; }
+    cargarMisReservas();
+  } catch (e) {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+
+(function initRecursosDocente() {
+  const hoy = new Date();
+  const limite = new Date();
+  limite.setDate(hoy.getDate() + 3);
+  const fmt = d => d.toISOString().split('T')[0];
+  const fechaInput = document.getElementById('resvFecha');
+  if (fechaInput) {
+    fechaInput.min = fmt(hoy);
+    fechaInput.max = fmt(limite);
+  }
+})();
 
 function abrirCambiarPassword() {
   const status = document.getElementById('passwordStatus');
@@ -534,6 +734,9 @@ async function mostrarMenu(docente) {
   `;
   await cargarResumen(docente.id_docente);
   await renderAbm(docente.id_docente);
+  await cargarRecursosDisponiblesDocente();
+  await cargarMisMateriasParaReserva();
+  await cargarMisReservas();
 }
 
 async function cargarResumen(idDocente) {

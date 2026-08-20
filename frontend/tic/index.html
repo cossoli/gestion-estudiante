@@ -79,6 +79,7 @@
     </button>
       <button class="tab-btn" id="nav-inscriptos" onclick="cambiarTab('inscriptos')">Inscriptos por materia</button>
     <button class="tab-btn" id="nav-estudiantes" onclick="cambiarTab('estudiantes')">Estudiantes (ABM)</button>
+    <button class="tab-btn" id="nav-recursos" onclick="cambiarTab('recursos')">Recursos</button>
     </div>
 
     <!-- Sección ingresantes -->
@@ -174,6 +175,65 @@
       </div>
     </div>
 
+  </div>
+
+
+  <!-- Seccion Recursos -->
+  <div id="secRecursos" class="card" style="display:none;border-top-left-radius:0;border-top-right-radius:0;border-top:none;margin-top:0">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <h3 class="card-title" style="margin:0">Catalogo de recursos</h3>
+      <button class="btn btn-secondary" onclick="cargarRecursosTIC()">Actualizar</button>
+    </div>
+
+    <div class="filter-bar">
+      <input type="text" id="recNombre" placeholder="Nombre del recurso">
+      <input type="number" id="recCantidad" placeholder="Cantidad" min="1" value="1" style="max-width:100px">
+      <select id="recEstado" style="max-width:160px">
+        <option value="disponible">Disponible</option>
+        <option value="en_reparacion">En reparacion</option>
+        <option value="baja">Baja</option>
+      </select>
+      <button class="btn btn-primary" onclick="crearRecursoTIC()">+ Agregar recurso</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Cantidad</th>
+            <th>Estado</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyRecursos"></tbody>
+      </table>
+      <div id="emptyStateRecursos" class="empty-state" style="display:none">
+        <p>No hay recursos cargados.</p>
+      </div>
+    </div>
+
+    <h3 class="card-title" style="margin:24px 0 12px">Reservas de docentes</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Horario</th>
+            <th>Recurso</th>
+            <th>Materia</th>
+            <th>Aula</th>
+            <th>Docente</th>
+            <th>Estado</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyReservasTIC"></tbody>
+      </table>
+      <div id="emptyStateReservasTIC" class="empty-state" style="display:none">
+        <p>No hay reservas registradas.</p>
+      </div>
+    </div>
   </div>
 
 </main>
@@ -524,6 +584,114 @@ async function toggleCuenta(id, nombre, activar) {
   }
 }
 
+
+async function cargarRecursosTIC() {
+  try {
+    const res = await fetch(API + '/tic/recursos', { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    const tbody = document.getElementById('tbodyRecursos');
+    tbody.innerHTML = '';
+    if (!data.ok || !data.recursos.length) {
+      document.getElementById('emptyStateRecursos').style.display = 'block';
+    } else {
+      document.getElementById('emptyStateRecursos').style.display = 'none';
+      data.recursos.forEach(r => {
+        const tr = document.createElement('tr');
+        const opciones = ['disponible', 'en_reparacion', 'baja'].map(e =>
+          `<option value="${e}" ${e === r.estado ? 'selected' : ''}>${e === 'disponible' ? 'Disponible' : e === 'en_reparacion' ? 'En reparacion' : 'Baja'}</option>`
+        ).join('');
+        tr.innerHTML = `<td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${esc(r.estado)}</td><td><select onchange="cambiarEstadoRecursoTIC(${r.id_recurso}, this.value)" style="padding:4px 8px;font-size:12px">${opciones}</select></td>`;
+        tbody.appendChild(tr);
+      });
+    }
+  } catch (e) {
+    alert('No se pudo conectar con el servidor.');
+  }
+  cargarReservasTIC();
+}
+
+async function crearRecursoTIC() {
+  const nombre = document.getElementById('recNombre').value.trim();
+  const cantidad = parseInt(document.getElementById('recCantidad').value, 10) || 1;
+  const estado = document.getElementById('recEstado').value;
+  if (!nombre) { alert('Falta el nombre del recurso.'); return; }
+  try {
+    const res = await fetch(API + '/tic/recursos/crear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre, cantidad, estado }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Error al crear el recurso.'); return; }
+    document.getElementById('recNombre').value = '';
+    document.getElementById('recCantidad').value = 1;
+    cargarRecursosTIC();
+  } catch (e) {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+
+async function cargarReservasTIC() {
+  try {
+    const res = await fetch(API + '/tic/reservas', { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+    const tbody = document.getElementById('tbodyReservasTIC');
+    tbody.innerHTML = '';
+    if (!data.ok || !data.reservas.length) {
+      document.getElementById('emptyStateReservasTIC').style.display = 'block';
+    } else {
+      document.getElementById('emptyStateReservasTIC').style.display = 'none';
+      data.reservas.forEach(r => {
+        const tr = document.createElement('tr');
+        const docente = esc(r.docente_apellido) + ', ' + esc(r.docente_nombre);
+        const horario = r.hora_inicio.substring(0,5) + ' a ' + r.hora_fin.substring(0,5);
+        const accion = r.estado === 'activa'
+          ? `<button class="btn btn-bad" style="padding:4px 10px;font-size:12px" onclick="cancelarReservaTIC(${r.id_reserva})">Cancelar</button>`
+          : '-';
+        tr.innerHTML = `<td>${r.fecha}</td><td>${horario}</td><td>${esc(r.recurso)}</td><td>${esc(r.materia || '-')}</td><td>${esc(r.aula || '-')}</td><td>${docente}</td><td>${esc(r.estado)}</td><td>${accion}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+  } catch (e) {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+
+async function cancelarReservaTIC(idReserva) {
+  if (!confirm('Confirma que desea cancelar esta reserva?')) return;
+  try {
+    const res = await fetch(API + '/tic/reservas/baja', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_reserva: idReserva }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Error al cancelar la reserva.'); return; }
+    cargarReservasTIC();
+  } catch (e) {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+
+
+async function cambiarEstadoRecursoTIC(idRecurso, estado) {
+  try {
+    const res = await fetch(API + '/tic/recursos/estado', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_recurso: idRecurso, estado: estado }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Error al actualizar el estado.'); return; }
+    cargarRecursosTIC();
+  } catch (e) {
+    alert('No se pudo conectar con el servidor.');
+  }
+}
+
 function cambiarTab(tab) {
   document.getElementById('secIngresantes').style.display = tab === 'ingresantes' ? 'block' : 'none';
   document.getElementById('secMaterias').style.display    = tab === 'materias'    ? 'block' : 'none';
@@ -538,7 +706,10 @@ function cambiarTab(tab) {
   if (tab === 'materias') cargarMaterias();
   if (tab === 'inscriptos') inicializarInscriptos();
   document.getElementById('secEstudiantesABM').style.display = tab === 'estudiantes' ? 'block' : 'none';
+  document.getElementById('secRecursos').style.display = tab === 'recursos' ? 'block' : 'none';
   document.getElementById('nav-estudiantes').classList.toggle('active', tab === 'estudiantes');
+  document.getElementById('nav-recursos').classList.toggle('active', tab === 'recursos');
+  if (tab === 'recursos') cargarRecursosTIC();
   if (tab === 'estudiantes') inicializarABM();
 }
 

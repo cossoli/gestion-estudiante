@@ -609,8 +609,12 @@ async function anotarseAMesa(idMesa, nombreMateria) {
       signal: AbortSignal.timeout(8000)
     });
     const data = await res.json();
-    if (data.ok) cargarMesas();
-    else alert(data.error || 'No se pudo registrar la inscripción.');
+    if (data.ok) {
+      await cargarMesas();
+      window.open('../constancia.html?dni=' + encodeURIComponent(dni) + '&id_mesa=' + idMesa, '_blank');
+    } else {
+      alert(data.error || 'No se pudo registrar la inscripción.');
+    }
   } catch {
     alert('No se pudo conectar con el servidor.');
   }

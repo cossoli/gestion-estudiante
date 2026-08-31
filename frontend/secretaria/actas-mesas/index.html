@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Actas de exámenes — Secretaría IFDC</title>
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .acta-header { display:none; }
+  @media print {
+    header, .filter-bar, .btn { display:none !important; }
+    .acta-header { display:block !important; margin-bottom:24px; }
+    body { background:#fff; }
+    .card { box-shadow:none; border:none; padding:0; }
+    main { max-width:100%; }
+  }
+  .acta-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; margin: 16px 0 24px; font-size: 14px; }
+  .acta-meta b { color: #1B2E10; }
+  table.acta-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  table.acta-table th, table.acta-table td { border: 1px solid #ccc; padding: 8px 10px; font-size: 13px; text-align: left; }
+  table.acta-table th { background: #f5f9f2; }
+  select.nota-select { width: 100%; border: 1px solid #ccc; border-radius: 4px; padding: 4px 6px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">I</div>
+      <div>
+        <div class="header-title">IFDC Río Colorado</div>
+        <div class="header-subtitle">Secretaría — Actas de exámenes</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <a class="btn btn-secondary" href="/secretaria/">← Panel Secretaría</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <div class="card" style="margin-bottom:20px;">
+    <h2 style="margin-top:0;">Actas de exámenes</h2>
+    <p class="text-muted">Generá el acta de una mesa de examen final, cargá las notas e imprimí o guardá como PDF.</p>
+
+    <div class="grid grid-2" style="gap:14px">
+      <div class="field">
+        <label class="field-label">Carrera</label>
+        <select id="selCarrera"><option value="">Seleccioná una carrera</option></select>
+      </div>
+      <div class="field">
+        <label class="field-label">Materia</label>
+        <select id="selMateria" disabled><option value="">Primero seleccioná la carrera</option></select>
+      </div>
+    </div>
+    <div class="field" style="margin-top:14px">
+      <label class="field-label">Mesa</label>
+      <select id="selMesa" disabled><option value="">Primero seleccioná la materia</option></select>
+    </div>
+  </div>
+
+  <div id="actaContenido"></div>
+
+</main>
+
+<script src="/app.js"></script>
+<script>
+  const TURNO_LABEL = { feb_mar: 'Febrero - Marzo', julio: 'Julio', septiembre: 'Septiembre', nov_dic: 'Noviembre - Diciembre' };
+  const NOTA_LETRAS = { '1':'uno','2':'dos','3':'tres','4':'cuatro','5':'cinco','6':'seis','7':'siete','8':'ocho','9':'nueve','10':'diez' };
+
+  function esc(s) {
+    return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function formatearFecha(f) {
+    if (!f) return 'A confirmar';
+    return new Date(f).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+  }
+
+  async function cargarCarreras() {
+    try {
+      const res = await fetch(API + '/carreras');
+      const data = await res.json();
+      const carreras = data.carreras || data || [];
+      const sel = document.getElementById('selCarrera');
+      carreras.forEach(c => {
+        const o = document.createElement('option');
+        o.value = c.id_carrera;
+        o.textContent = c.nombre_carrera;
+        sel.appendChild(o);
+      });
+    } catch (e) { /* silencioso */ }
+  }
+
+  document.getElementById('selCarrera').addEventListener('change', async (e) => {
+    const idCarrera = e.target.value;
+    const selMateria = document.getElementById('selMateria');
+    const selMesa = document.getElementById('selMesa');
+    selMateria.innerHTML = '<option value="">Cargando...</option>';
+    selMateria.disabled = true;
+    selMesa.innerHTML = '<option value="">Primero seleccioná la materia</option>';
+    selMesa.disabled = true;
+    document.getElementById('actaContenido').innerHTML = '';
+    if (!idCarrera) { selMateria.innerHTML = '<option value="">Primero seleccioná la carrera</option>'; return; }
+
+    try {
+      const res = await fetch(API + '/tic/materias-por-carrera?id_carrera=' + idCarrera);
+      const data = await res.json();
+      const materias = data.materias || data || [];
+      selMateria.innerHTML = '<option value="">Seleccioná una materia</option>';
+      materias.forEach(m => {
+        const o = document.createElement('option');
+        o.value = m.id_materia;
+        o.textContent = m.nombre_materia;
+        selMateria.appendChild(o);
+      });
+      selMateria.disabled = false;
+    } catch (e) {
+      selMateria.innerHTML = '<option value="">Error al cargar</option>';
+    }
+  });
+
+  document.getElementById('selMateria').addEventListener('change', async (e) => {
+    const idMateria = e.target.value;
+    const selMesa = document.getElementById('selMesa');
+    selMesa.innerHTML = '<option value="">Cargando...</option>';
+    selMesa.disabled = true;
+    document.getElementById('actaContenido').innerHTML = '';
+    if (!idMateria) { selMesa.innerHTML = '<option value="">Primero seleccioná la materia</option>'; return; }
+
+    try {
+      const res = await fetch(API + '/secretaria/actas-mesas/mesas-por-materia?id_materia=' + idMateria);
+      const data = await res.json();
+      const mesas = data.mesas || [];
+      if (mesas.length === 0) {
+        selMesa.innerHTML = '<option value="">Sin mesas cargadas</option>';
+        return;
+      }
+      selMesa.innerHTML = '<option value="">Seleccioná una mesa</option>';
+      mesas.forEach(m => {
+        const o = document.createElement('option');
+        o.value = m.id_mesa;
+        o.textContent = (TURNO_LABEL[m.turno] || m.turno) + ' ' + m.anio + (m.fecha_mesa ? ' — ' + formatearFecha(m.fecha_mesa) : '');
+        selMesa.appendChild(o);
+      });
+      selMesa.disabled = false;
+    } catch (e) {
+      selMesa.innerHTML = '<option value="">Error al cargar</option>';
+    }
+  });
+
+  document.getElementById('selMesa').addEventListener('change', async (e) => {
+    const idMesa = e.target.value;
+    const cont = document.getElementById('actaContenido');
+    if (!idMesa) { cont.innerHTML = ''; return; }
+    cont.innerHTML = '<div class="text-sm text-muted" style="padding:12px">Cargando acta...</div>';
+
+    try {
+      const res = await fetch(API + '/secretaria/actas-mesas/detalle?id_mesa=' + idMesa);
+      const data = await res.json();
+      if (!data.ok) { cont.innerHTML = 'Error al cargar el acta.'; return; }
+
+      const mesa = data.mesa;
+      const alumnos = data.alumnos;
+      const docente = (mesa.docente_nombre || mesa.docente_apellido)
+        ? esc(mesa.docente_apellido) + ', ' + esc(mesa.docente_nombre)
+        : 'Sin asignar';
+      const tribunalCompleto = [docente, mesa.tribunal ? esc(mesa.tribunal) : null].filter(Boolean).join(' — ');
+
+      const filas = alumnos.map(a => {
+        const opciones = ['', '1','2','3','4','5','6','7','8','9','10'].map(n => {
+          const sel = String(a.nota_obtenida ?? '') === n ? 'selected' : '';
+          return `<option value="${n}" ${sel}>${n === '' ? '-' : n}</option>`;
+        }).join('');
+        const ausenteChecked = a.resultado === 'ausente' ? 'checked' : '';
+        return `
+          <tr data-id="${a.id_inscripcion}">
+            <td>${esc(a.apellido)}, ${esc(a.nombre)}</td>
+            <td>${esc(a.dni)}</td>
+            <td>
+              <select class="nota-select" onchange="actualizarLetras(this)">${opciones}</select>
+            </td>
+            <td class="letras-cell">${NOTA_LETRAS[String(a.nota_obtenida ?? '')] || ''}</td>
+            <td style="text-align:center"><input type="checkbox" class="ausente-check" ${ausenteChecked}></td>
+          </tr>
+        `;
+      }).join('');
+
+      const totalAprob = alumnos.filter(a => a.resultado === 'aprobado').length;
+      const totalDesap = alumnos.filter(a => a.resultado === 'reprobado').length;
+      const totalAus   = alumnos.filter(a => a.resultado === 'ausente').length;
+
+      cont.innerHTML = `
+        <div class="card" style="padding:24px;">
+          <div class="acta-header" style="text-align:center;">
+            <h1 style="margin:0;font-size:16px;">IFDC Río Colorado</h1>
+            <h2 style="margin:4px 0;">ACTA DE EXAMEN</h2>
+          </div>
+          <div class="acta-meta">
+            <div><b>Mesa:</b> ${TURNO_LABEL[mesa.turno] || esc(mesa.turno)} ${esc(mesa.anio)}</div>
+            <div><b>Profesorado:</b> ${esc(mesa.nombre_carrera)}</div>
+            <div><b>Espacio curricular:</b> ${esc(mesa.nombre_materia)}</div>
+            <div><b>Fecha:</b> ${formatearFecha(mesa.fecha_mesa)}</div>
+            <div style="grid-column:1/-1"><b>Tribunal:</b> ${tribunalCompleto}</div>
+          </div>
+
+          <table class="acta-table">
+            <thead>
+              <tr>
+                <th>Estudiante</th>
+                <th>DNI</th>
+                <th>Calificación (número)</th>
+                <th>Calificación (letras)</th>
+                <th>Ausente</th>
+              </tr>
+            </thead>
+            <tbody>${filas}</tbody>
+          </table>
+
+          <div style="margin-top:20px;font-size:14px;">
+            De ${alumnos.length} inscriptos, resultaron <b>${totalAprob}</b> aprobados, <b>${totalDesap}</b> desaprobados y <b>${totalAus}</b> ausentes.
+          </div>
+
+          <div style="margin-top:20px;display:flex;gap:10px;">
+            <button class="btn btn-primary" onclick="guardarNotas()">Guardar notas</button>
+            <button class="btn btn-secondary" onclick="window.print()">🖨 Imprimir / PDF</button>
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      cont.innerHTML = 'Error de conexión al cargar el acta.';
+    }
+  });
+
+  function actualizarLetras(sel) {
+    const fila = sel.closest('tr');
+    fila.querySelector('.letras-cell').textContent = NOTA_LETRAS[sel.value] || '';
+    if (sel.value) fila.querySelector('.ausente-check').checked = false;
+  }
+
+  async function guardarNotas() {
+    const filas = document.querySelectorAll('#actaContenido tr[data-id]');
+    const cambios = [];
+    filas.forEach(fila => {
+      const idInsc = fila.getAttribute('data-id');
+      const nota = fila.querySelector('.nota-select').value;
+      const ausente = fila.querySelector('.ausente-check').checked;
+      if (ausente) {
+        cambios.push({ id_inscripcion: idInsc, resultado: 'ausente', nota_obtenida: null });
+      } else if (nota) {
+        cambios.push({ id_inscripcion: idInsc, resultado: parseFloat(nota) >= 6 ? 'aprobado' : 'reprobado', nota_obtenida: nota });
+      }
+    });
+    if (cambios.length === 0) { alert('No hay notas para guardar.'); return; }
+
+    try {
+      for (const c of cambios) {
+        await fetch(API + '/docente/mesas/resultado', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(c)
+        });
+      }
+      alert('Notas guardadas.');
+      document.getElementById('selMesa').dispatchEvent(new Event('change'));
+    } catch (e) {
+      alert('Error al guardar las notas.');
+    }
+  }
+
+  cargarCarreras();
+</script>
+</body>
+</html>

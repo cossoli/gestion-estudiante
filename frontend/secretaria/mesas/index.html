@@ -69,6 +69,7 @@
           <option value="">Todos los turnos</option>
           <option value="feb_mar">Feb - Mar</option>
           <option value="julio">Julio</option>
+            <option value="septiembre">Septiembre</option>
           <option value="nov_dic">Nov - Dic</option>
         </select>
         <select id="filtroCarrera" onchange="filtrar()" style="max-width:220px">
@@ -121,6 +122,7 @@
               <option value="">Seleccioná el turno</option>
               <option value="feb_mar">Feb - Mar</option>
               <option value="julio">Julio</option>
+            <option value="septiembre">Septiembre</option>
               <option value="nov_dic">Nov - Dic</option>
             </select>
           </div>
@@ -130,9 +132,19 @@
           </div>
         </div>
 
+        <div class="grid grid-2" style="gap:14px">
+          <div class="field">
+            <label class="field-label">Fecha del examen</label>
+            <input id="mesaFecha" type="date">
+          </div>
+          <div class="field">
+            <label class="field-label">Hora del examen</label>
+            <input id="mesaHora" type="time">
+          </div>
+        </div>
         <div class="field">
-          <label class="field-label">Fecha del examen</label>
-          <input id="mesaFecha" type="date">
+          <label class="field-label">Tribunal (además del docente titular)</label>
+          <input id="mesaTribunal" type="text" placeholder="Ej: Contreras Azanza — Tomaselli Pizá">
         </div>
 
         <div class="grid grid-2" style="gap:14px">
@@ -253,7 +265,7 @@ function renderMesas(datos) {
   if (!datos.length) { grid.innerHTML = ''; empty.style.display = 'block'; return; }
   empty.style.display = 'none';
 
-  const turnoLabel = { feb_mar: 'Feb - Mar', julio: 'Julio', nov_dic: 'Nov - Dic' };
+  const turnoLabel = { feb_mar: 'Feb - Mar', julio: 'Julio', septiembre: 'Septiembre', nov_dic: 'Nov - Dic' };
 
   grid.innerHTML = datos.map(m => `
     <div class="mesa-card ${m.activa ? 'activa' : 'inactiva'}">
@@ -290,6 +302,10 @@ function renderMesas(datos) {
           onclick="toggleMesa(${m.id_mesa}, ${m.activa})">
           ${m.activa ? 'Cerrar inscripción' : 'Reabrir inscripción'}
         </button>
+          <button class="btn btn-danger" style="font-size:13px;padding:6px 12px" title="Eliminar mesa"
+            onclick="eliminarMesa(${m.id_mesa}, '${esc(m.nombre_materia)}')">
+            🗑
+          </button>
       </div>
     </div>
   `).join('');
@@ -390,6 +406,8 @@ async function editarMesa(id) {
   document.getElementById('mesaTurno').value    = mesa.turno;
   document.getElementById('mesaAnio').value     = mesa.anio;
   document.getElementById('mesaFecha').value    = mesa.fecha_mesa ? mesa.fecha_mesa.split('T')[0] : '';
+      document.getElementById('mesaHora').value     = mesa.hora_mesa ? mesa.hora_mesa.substring(0,5) : '';
+      document.getElementById('mesaTribunal').value = mesa.tribunal || '';
   document.getElementById('mesaAula').value     = mesa.aula || '';
   document.getElementById('mesaDocente').value  = mesa.id_docente || '';
   document.getElementById('mesaActiva').value   = mesa.activa ? '1' : '0';
@@ -402,12 +420,29 @@ function cerrarModalMesa() {
   mesaEditandoId = null;
 }
 
+async function eliminarMesa(idMesa, nombreMateria) {
+  if (!confirm('¿Eliminar la mesa de "' + nombreMateria + '"? Esta acción no se puede deshacer.')) return;
+  try {
+    const res = await fetch(API + '/secretaria/mesas/' + idMesa, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.ok) {
+      await cargar();
+    } else {
+      alert(data.error || 'No se pudo eliminar la mesa.');
+    }
+  } catch (e) {
+    alert('Error de conexión al eliminar la mesa.');
+  }
+}
+
 async function guardarMesa() {
   const status     = document.getElementById('modalMesaStatus');
   const idMateria  = parseInt(document.getElementById('mesaMateria').value) || 0;
   const turno      = document.getElementById('mesaTurno').value;
   const anio       = parseInt(document.getElementById('mesaAnio').value);
   const fecha      = document.getElementById('mesaFecha').value;
+  const hora        = document.getElementById('mesaHora').value;
+  const tribunal    = document.getElementById('mesaTribunal').value.trim();
   const aula       = document.getElementById('mesaAula').value.trim();
   const idDocente  = parseInt(document.getElementById('mesaDocente').value) || null;
   const activa     = document.getElementById('mesaActiva').value === '1';
@@ -429,7 +464,7 @@ async function guardarMesa() {
     const res  = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id_materia: idMateria, turno, anio, fecha_mesa: fecha || null, aula: aula || null, id_docente: idDocente, activa }),
+      body: JSON.stringify({ id_materia: idMateria, turno, anio, fecha_mesa: fecha || null, hora_mesa: hora || null, aula: aula || null, id_docente: idDocente, activa, tribunal: tribunal || null }),
       signal: AbortSignal.timeout(8000)
     });
     const data = await res.json();

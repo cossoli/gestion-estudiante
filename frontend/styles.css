@@ -16,6 +16,7 @@
   --ok: #2f7a1f;
   --ok-bg: #e6f5dc;
   --warn: #c97a0e;
+  --danger: #d64545;
   --warn-bg: #ffe3b0;
   --bad: #d14343;
   --bad-bg: #fbe2e2;
@@ -272,6 +273,8 @@ button, .btn {
 .btn-ok:hover { filter: brightness(1.1); transform: translateY(-1px); }
 
 .btn-warn { background: var(--warn); color: #fff; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { filter: brightness(1.1); transform: translateY(-1px); }
 .btn-warn:hover { filter: brightness(1.1); transform: translateY(-1px); }
 
 .btn-bad { background: var(--bad); color: #fff; }

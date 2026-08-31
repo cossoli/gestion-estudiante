@@ -911,7 +911,7 @@ if ($path === '/tic/reset-password-alumno' && $_SERVER['REQUEST_METHOD'] === 'PO
         if ($idMateria === 0 || $turno === '' || $anio === 0) {
             respond(['ok' => false, 'error' => 'Faltan campos obligatorios.'], 400);
         }
-        if (!in_array($turno, ['feb_mar','julio','nov_dic'], true)) {
+        if (!in_array($turno, ['feb_mar','julio','septiembre','nov_dic'], true)) {
             respond(['ok' => false, 'error' => 'Turno inválido.'], 400);
         }
 

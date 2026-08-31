@@ -1114,20 +1114,22 @@ if ($path === '/tic/reset-password-alumno' && $_SERVER['REQUEST_METHOD'] === 'PO
         $anio       = (int) ($data['anio'] ?? 0);
         $fechaMesa  = trim($data['fecha_mesa'] ?? '') ?: null;
         $aula       = trim($data['aula'] ?? '') ?: null;
+        $horaMesa = trim($data['hora_mesa'] ?? '') ?: null;
+        $tribunal = trim($data['tribunal'] ?? '') ?: null;
         $idDocente  = (int) ($data['id_docente'] ?? 0) ?: null;
         $activa     = (bool) ($data['activa'] ?? true);
 
         if ($idMateria === 0 || $turno === '' || $anio === 0) {
             respond(['ok' => false, 'error' => 'Faltan campos obligatorios.'], 400);
         }
-        if (!in_array($turno, ['feb_mar','julio','nov_dic'], true)) {
+        if (!in_array($turno, ['feb_mar','julio','septiembre','nov_dic'], true)) {
             respond(['ok' => false, 'error' => 'Turno inválido.'], 400);
         }
 
         $pdo->prepare(
-            "INSERT INTO mesas_finales (id_materia, id_docente, anio, turno, fecha_mesa, aula, activa)
-             VALUES (?, ?, ?, ?, ?, ?, ?)"
-        )->execute([$idMateria, $idDocente, $anio, $turno, $fechaMesa, $aula, $activa]);
+            "INSERT INTO mesas_finales (id_materia, id_docente, anio, turno, fecha_mesa, hora_mesa, aula, activa, tribunal)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        )->execute([$idMateria, $idDocente, $anio, $turno, $fechaMesa, $horaMesa, $aula, $activa, $tribunal]);
 
         respond(['ok' => true, 'message' => 'Mesa creada correctamente.']);
     }
@@ -1148,6 +1150,8 @@ if ($path === '/tic/reset-password-alumno' && $_SERVER['REQUEST_METHOD'] === 'PO
             $anio      = (int) ($data['anio'] ?? 0);
             $fechaMesa = trim($data['fecha_mesa'] ?? '') ?: null;
             $aula      = trim($data['aula'] ?? '') ?: null;
+            $horaMesa = trim($data['hora_mesa'] ?? '') ?: null;
+            $tribunal = trim($data['tribunal'] ?? '') ?: null;
             $idDocente = (int) ($data['id_docente'] ?? 0) ?: null;
             $activa    = (bool) ($data['activa'] ?? true);
 
@@ -1155,13 +1159,74 @@ if ($path === '/tic/reset-password-alumno' && $_SERVER['REQUEST_METHOD'] === 'PO
                 respond(['ok' => false, 'error' => 'Faltan campos obligatorios.'], 400);
             }
             $pdo->prepare(
-                "UPDATE mesas_finales SET id_materia=?, id_docente=?, anio=?, turno=?, fecha_mesa=?, aula=?, activa=? WHERE id_mesa=?"
-            )->execute([$idMateria, $idDocente, $anio, $turno, $fechaMesa, $aula, $activa, $idMesa]);
+                "UPDATE mesas_finales SET id_materia=?, id_docente=?, anio=?, turno=?, fecha_mesa=?, hora_mesa=?, aula=?, activa=?, tribunal=? WHERE id_mesa=?"
+            )->execute([$idMateria, $idDocente, $anio, $turno, $fechaMesa, $horaMesa, $aula, $activa, $tribunal, $idMesa]);
         }
         respond(['ok' => true]);
     }
 
     // ── Secretaría: mesas — inscriptos ────────────────────────────────────────
+        // — Secretaria: mesas — eliminar ——————————————————————————
+    // — Secretaria: actas de examen — mesas cerradas por materia ——
+    if ($path === '/secretaria/actas-mesas/mesas-por-materia' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $idMateria = (int) ($_GET['id_materia'] ?? 0);
+        if ($idMateria === 0) respond(['ok' => false, 'error' => 'Falta id_materia.'], 400);
+
+        $stmt = $pdo->prepare(
+            "SELECT id_mesa, turno, anio, fecha_mesa
+             FROM mesas_finales
+             WHERE id_materia = ?
+             ORDER BY anio DESC, fecha_mesa DESC NULLS LAST"
+        );
+        $stmt->execute([$idMateria]);
+        respond(['ok' => true, 'mesas' => $stmt->fetchAll()]);
+    }
+
+    // — Secretaria: actas de examen — detalle de una mesa ——————
+    if ($path === '/secretaria/actas-mesas/detalle' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $idMesa = (int) ($_GET['id_mesa'] ?? 0);
+        if ($idMesa === 0) respond(['ok' => false, 'error' => 'Falta id_mesa.'], 400);
+
+        $stmtMesa = $pdo->prepare(
+            "SELECT mf.id_mesa, mf.turno, mf.anio, mf.fecha_mesa, mf.tribunal,
+                    m.nombre_materia, c.nombre_carrera,
+                    d.nombre AS docente_nombre, d.apellido AS docente_apellido
+             FROM mesas_finales mf
+             JOIN materias m ON m.id_materia = mf.id_materia
+             JOIN carreras c ON c.id_carrera = m.id_carrera
+             LEFT JOIN docentes d ON d.id_docente = mf.id_docente
+             WHERE mf.id_mesa = ?"
+        );
+        $stmtMesa->execute([$idMesa]);
+        $mesa = $stmtMesa->fetch();
+        if (!$mesa) respond(['ok' => false, 'error' => 'Mesa no encontrada.'], 404);
+
+        $stmtAlumnos = $pdo->prepare(
+            "SELECT im.id_inscripcion, e.apellido, e.nombre, e.dni, im.resultado, im.nota_obtenida
+             FROM inscripciones_mesas im
+             JOIN estudiantes e ON e.id_estudiante = im.id_estudiante
+             WHERE im.id_mesa = ?
+             ORDER BY e.apellido, e.nombre"
+        );
+        $stmtAlumnos->execute([$idMesa]);
+        $alumnos = $stmtAlumnos->fetchAll();
+
+        respond(['ok' => true, 'mesa' => $mesa, 'alumnos' => $alumnos]);
+    }
+
+    if (preg_match('#^/secretaria/mesas/(\d+)$#', $path, $m) && $_SERVER['REQUEST_METHOD'] === 'DELETE') {
+        $idMesa = (int) $m[1];
+        try {
+            $pdo->prepare("DELETE FROM mesas_finales WHERE id_mesa = ?")->execute([$idMesa]);
+            respond(['ok' => true, 'message' => 'Mesa eliminada correctamente.']);
+        } catch (\PDOException $e) {
+            if ($e->getCode() === '23503') {
+                respond(['ok' => false, 'error' => 'No se puede eliminar: la mesa tiene estudiantes inscriptos.'], 409);
+            }
+            throw $e;
+        }
+    }
+
     if (preg_match('#^/secretaria/mesas/(\d+)/inscriptos$#', $path, $m) && $_SERVER['REQUEST_METHOD'] === 'GET') {
         $idMesa = (int) $m[1];
         $stmt   = $pdo->prepare(
@@ -1679,6 +1744,38 @@ if ($path === '/tic/nuevas-materias' && $_SERVER['REQUEST_METHOD'] === 'GET') {
         )->execute([$est['id_estudiante'], $idMesa]);
 
         respond(['ok' => true, 'message' => 'Inscripción registrada. Secretaría verificará tu condición.']);
+    }
+
+    // — Alumno: constancia de inscripcion a mesa —————————————
+    if ($path === '/alumno/constancia-mesa' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        $dni    = trim($_GET['dni'] ?? '');
+        $idMesa = (int) ($_GET['id_mesa'] ?? 0);
+        if ($dni === '' || $idMesa === 0) {
+            respond(['ok' => false, 'error' => 'Datos incompletos.'], 400);
+        }
+
+        $stmt = $pdo->prepare(
+            "SELECT e.nombre, e.apellido, e.dni,
+                    c.nombre_carrera,
+                    m.nombre_materia,
+                    mf.turno, mf.anio, mf.fecha_mesa, mf.hora_mesa, mf.aula,
+                    d.nombre AS docente_nombre, d.apellido AS docente_apellido,
+                    im.fecha_inscripcion
+             FROM inscripciones_mesas im
+             JOIN estudiantes e   ON e.id_estudiante = im.id_estudiante
+             JOIN mesas_finales mf ON mf.id_mesa = im.id_mesa
+             JOIN materias m      ON m.id_materia = mf.id_materia
+             JOIN carreras c      ON c.id_carrera = m.id_carrera
+             LEFT JOIN docentes d ON d.id_docente = mf.id_docente
+             WHERE e.dni = ? AND im.id_mesa = ?"
+        );
+        $stmt->execute([$dni, $idMesa]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            respond(['ok' => false, 'error' => 'No se encontro la inscripcion.'], 404);
+        }
+
+        respond(['ok' => true, 'constancia' => $row]);
     }
 
     // ── Alumno: resultados de exámenes finales ────────────────────────────────

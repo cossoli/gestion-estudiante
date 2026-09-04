@@ -55,6 +55,7 @@
           <option value="">Todos los turnos</option>
           <option value="feb_mar">Feb - Mar</option>
           <option value="julio">Julio</option>
+            <option value="septiembre">Septiembre</option>
           <option value="nov_dic">Nov - Dic</option>
         </select>
         <select id="filtroActiva" onchange="filtrar()" style="width:auto">
@@ -81,7 +82,7 @@
   <div class="modal" style="max-width:700px">
     <h3 class="modal-title" id="modalMesaTitulo"></h3>
     <p class="text-sm text-muted" id="modalMesaSub" style="margin-bottom:16px"></p>
-    <div id="modalMesaContent"></div>
+    <div id="modalMesaContent" style="max-height:400px;overflow-y:auto;padding-right:8px;"></div>
     <div class="modal-footer" style="margin-top:16px">
       <button class="btn btn-secondary" onclick="cerrarModal()">Cerrar</button>
     </div>
@@ -105,7 +106,7 @@
 let docenteData  = null;
 let todasLasMesas = [];
 let mesaActiva    = null;
-const turnoLabel  = { feb_mar: 'Feb - Mar', julio: 'Julio', nov_dic: 'Nov - Dic' };
+const turnoLabel  = { feb_mar: 'Feb - Mar', julio: 'Julio', septiembre: 'Septiembre', nov_dic: 'Nov - Dic' };
 
 if (!localStorage.getItem('docente_auth')) {
   document.getElementById('sinSesion').style.display    = 'block';

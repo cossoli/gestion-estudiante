@@ -183,7 +183,7 @@
   <div class="modal" style="max-width:700px">
     <h3 class="modal-title" id="modalAlumnosTitulo">Alumnos inscriptos</h3>
     <p class="text-sm text-muted" id="modalAlumnosSub" style="margin-bottom:16px"></p>
-    <div id="modalAlumnosContent"></div>
+    <div id="modalAlumnosContent" style="max-height:400px;overflow-y:auto;padding-right:8px;"></div>
     <div class="modal-footer" style="margin-top:16px">
       <button class="btn btn-secondary" onclick="cerrarModalAlumnos()">Cerrar</button>
     </div>
@@ -275,7 +275,7 @@ function renderMesas(datos) {
           <div class="mesa-meta">
             ${esc(m.nombre_carrera)} ·
             ${turnoLabel[m.turno] || m.turno} ${esc(String(m.anio))}
-            ${m.fecha_mesa ? ' · ' + new Date(m.fecha_mesa).toLocaleDateString('es-AR') : ''}
+            ${m.fecha_mesa ? ' · ' + m.fecha_mesa.split('-').reverse().join('/') : ''}
           </div>
           <div class="mesa-meta" style="margin-top:4px">
             ${m.aula ? '📍 ' + esc(m.aula) : ''}
